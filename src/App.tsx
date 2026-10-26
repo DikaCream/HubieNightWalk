@@ -214,7 +214,7 @@ export default function App() {
 
       <aside className="livepanel">
         <h3>Live table <em>Simulated players, demo only</em></h3>
-        <ul className="feed">{feed.map(e => <li key={e.id} className={e.kind}><span className="who">{e.player}</span><span className="what">{e.kind === 'bet' ? `bet ${money(Math.round(e.bet * 100))} on ${LEVELS[e.level].name}` : e.kind === 'cashout' ? `cashed out ${fmtMult(e.mult)}` : `hit a vent on row ${e.step}`}</span><b>{e.kind === 'cashout' ? '+' + money(Math.round(e.payout * 100)) : e.kind === 'bust' ? money(Math.round(e.bet * 100)) : ''}</b></li>)}</ul>
+        <ul className="feed">{feed.map(e => <li key={e.id} className={e.kind}><span className="who">{e.player}</span><span className="what">{e.kind === 'bet' ? `bet ${money(Math.round(e.bet * 100))} on ${LEVELS[e.level].name}` : e.kind === 'cashout' ? `cashed out ${fmtMult(e.mult)}` : `hit a vent on row ${e.step}`}</span><b>{e.kind === 'cashout' ? '+' + money(Math.round(e.payout * 100)) : e.kind === 'bust' ? 'lost ' + money(Math.round(e.bet * 100)) : ''}</b></li>)}</ul>
         <h3>Big wins chat</h3>
         <ul className="chat">{bigs.slice(0, 8).map((b, i) => <li key={b + i}>{b}</li>)}</ul>
       </aside>

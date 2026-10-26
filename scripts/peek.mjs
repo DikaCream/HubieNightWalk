@@ -1,0 +1,15 @@
+import { chromium } from 'playwright';
+const [w, h, name, q = ''] = [+process.argv[2], +process.argv[3], process.argv[4], process.argv[5]];
+const mobile = w < 600;
+const b = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required'] });
+const p = await b.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: mobile ? 2 : 1, isMobile: mobile, hasTouch: mobile });
+const errs = []; p.on('pageerror', e => errs.push(e.message)); p.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') errs.push(m.type() + ' ' + m.text()); });
+await p.goto('http://127.0.0.1:4190/' + q); await p.waitForTimeout(1500);
+await p.screenshot({ path: `/tmp/${name}-intro.png` });
+await p.click('.cta', { force: true }); await p.click('.cta', { force: true }); await p.waitForTimeout(500);
+await p.click('.main', { force: true }); await p.waitForTimeout(1200);
+await p.screenshot({ path: `/tmp/${name}-round.png` });
+await p.click('.tile-btn >> nth=0', { force: true }); await p.waitForTimeout(2500);
+await p.screenshot({ path: `/tmp/${name}-pick.png` });
+console.log(JSON.stringify(await p.evaluate(() => { const s = window.__hnw(); delete s.history; return s; })), errs);
+await b.close();

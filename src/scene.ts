@@ -40,7 +40,11 @@ export class Scene {
     this.app.ticker.maxFPS = 60;
     this.app.ticker.add(() => this.idle());
   }
-  private track<T extends gsap.core.Animation>(t: T) { this.tweens.push(t); t.eventCallback('onComplete', () => { const i = this.tweens.indexOf(t); if (i >= 0) this.tweens.splice(i, 1); }); return t; }
+  private track<T extends gsap.core.Animation>(t: T) {
+    this.tweens.push(t); const prev = t.eventCallback('onComplete') as (() => void) | null;
+    t.eventCallback('onComplete', () => { const i = this.tweens.indexOf(t); if (i >= 0) this.tweens.splice(i, 1); prev?.(); });
+    return t;
+  }
   private d(s: number) { return this.fast ? s * 0.45 : s; }
   killAll() { for (const t of this.tweens) t.kill(); this.tweens.length = 0; gsap.killTweensOf([this.hubie, this.hubie?.scale, this.world]); }
 
