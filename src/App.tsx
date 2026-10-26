@@ -67,8 +67,9 @@ export default function App() {
 
   function updateRects() {
     const sc = scene.current; const g = game.round;
-    if (!sc || !sc.level || !g || g.status !== 'live' || game.busy) { setRects([]); return; }
-    setRects(Array.from({ length: tilesOn(sc.level, g.step) }, (_, i) => sc.tileRect(g.step, i)));
+    const next = !sc || !sc.level || !g || g.status !== 'live' || game.busy ? [] : Array.from({ length: tilesOn(sc.level, g.step) }, (_, i) => sc.tileRect(g.step, i));
+    // Keep the old array when nothing moved, so this effect (it runs after every render) cannot loop.
+    setRects(prev => prev.length === next.length && prev.every((a, i) => a.x === next[i].x && a.y === next[i].y && a.w === next[i].w && a.h === next[i].h) ? prev : next);
   }
   useEffect(updateRects);
 
