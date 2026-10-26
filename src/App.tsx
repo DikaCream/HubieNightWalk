@@ -42,7 +42,7 @@ export default function App() {
   const [sheet, setSheet] = useState<'auto' | 'live' | 'sound' | null>(null);
   const [mode, setMode] = useState<'manual' | 'auto'>('manual');
   const [feed, setFeed] = useState<LiveEvent[]>([]);
-  const [art, setArt] = useState<{ idle: string; win: string }>({ idle: '', win: '' });
+  const [art, setArt] = useState<{ idle: string; win: string; bust: string }>({ idle: '', win: '', bust: '' });
   const [betText, setBetText] = useState((game.betCents / 100).toFixed(2));
   const [targetText, setTargetText] = useState('2.00');
   const [verify, setVerify] = useState<{ server: string; client: string; nonce: string; level: LevelId; out?: { hash: string; layout: boolean[][] } | string }>({ server: '', client: '', nonce: '0', level: 'medium' });
@@ -55,7 +55,7 @@ export default function App() {
     const sc = new Scene(stageRef.current!); scene.current = sc; sc.fast = game.fast;
     sc.onLayout = () => updateRects();
     sc.onFrame = (x, y) => { const el = winRef.current; if (el) el.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px) translate(-50%, 0)`; };
-    void sc.ready.then(async () => { sc.setLevel(LEVELS[game.level]); void sc.walkIn(); setArt({ idle: await sc.portrait('idle'), win: await sc.portrait('win') }); });
+    void sc.ready.then(async () => { sc.setLevel(LEVELS[game.level]); void sc.walkIn(); setArt({ idle: await sc.portrait('idle'), win: await sc.portrait('win'), bust: await sc.portrait('bust') }); });
     fx.current = new FX(fxRef.current!);
     const off = liveSource.subscribe(e => setFeed(f => [e, ...f].slice(0, 40)));
     const onKey = (e: KeyboardEvent) => { if ((e.target as HTMLElement).tagName === 'INPUT' || tab || intro) return; if (e.code === 'Space') { e.preventDefault(); mainAction(); } const n = Number(e.key); if (n >= 1 && n <= 4) void doPick(n - 1); };
@@ -171,7 +171,7 @@ export default function App() {
     <div className={'app' + (live ? ' live' : '')}>
       <canvas ref={fxRef} className="fx" />
       <header className="top">
-        <div className="brand">{art.idle && <img src={art.idle} alt="" />}<b>HUBIE'S NIGHT WALK</b></div>
+        <div className="brand">{art.bust && <img src={art.bust} alt="" />}<b><span className="long">HUBIE'S </span>NIGHT WALK</b></div>
         <div className="bal" aria-label="Demo balance"><span>Demo</span><b>{money(game.balance)}</b></div>
         <button className="ic snd" aria-label="Sound" onClick={() => { unlock(); setSheet(sheet === 'sound' ? null : 'sound'); }}><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor" />{isMuted() ? <path d="M16 9l5 6M21 9l-5 6" stroke="currentColor" strokeWidth="2" /> : <path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" stroke="currentColor" strokeWidth="2" fill="none" />}</svg></button>
         <button className="ic info" aria-label="Rules and fairness" onClick={() => setTab('rules')}>?</button>

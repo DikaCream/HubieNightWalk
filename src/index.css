@@ -15,7 +15,7 @@ select option { background: #151b21; }
 /* header: no box, just a dark strip that melts into the sky */
 .top { grid-area: top; position: relative; display: flex; align-items: center; gap: 6px; padding: 6px 10px; padding-top: max(6px, env(safe-area-inset-top)); background: linear-gradient(#080b0e, rgba(8, 11, 14, 0)); z-index: 20; height: 48px; }
 .brand { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1; }
-.brand img { width: 22px; height: 36px; object-fit: contain; object-position: center bottom; }
+.brand img { width: 28px; height: 37px; flex: none; object-fit: contain; object-position: center bottom; }
 .brand b { font-size: 12px; font-weight: 900; letter-spacing: 1.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #c5ced6; }
 .bal { display: flex; align-items: baseline; gap: 6px; padding: 0 6px; }
 .bal span { font-size: 10px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--mut); }
@@ -173,6 +173,7 @@ tr.lost td:nth-child(3) { color: #d98a72; }
 
 /* desktop: controls on the left, scene on the right, both below the header */
 @media (max-width: 400px) { .tabs button { padding: 8px 5px; font-size: 12px; } .bal span { display: none; } .brand b { font-size: 11px; letter-spacing: .8px; } }
+@media (max-width: 380px) { .brand .long { display: none; } }
 @media (min-width: 960px) {
   .app { grid-template-columns: 340px minmax(0, 1fr); grid-template-rows: 56px minmax(0, 1fr); grid-template-areas: 'top top' 'panel stage'; }
   .top { height: 56px; padding: 0 18px; background: #0a0e12; }
