@@ -5,7 +5,7 @@ import { Scene, fmtMult } from './scene';
 import { FX } from './fx';
 import { LEVELS, LEVEL_ORDER, MAX_BET, MIN_BET, buildLayout, floatsNeeded, isSummit, tilesOn, type LevelId } from './engine';
 import { hmacFloats, randomHex, sha256Hex } from './fair';
-import { getVolume, isMuted, setIntensity, setMuted, setVolume, sfx, unlock } from './sound';
+import { getVolume, isMuted, renderOffline, setIntensity, setMuted, setVolume, sfx, unlock } from './sound';
 import { liveSource, type LiveEvent } from './live';
 import { ART } from './art';
 
@@ -24,7 +24,8 @@ const tierOf = (m: number) => (m >= 10000 ? 4 : m >= 1000 ? 3 : m >= 100 ? 2 : m
 type Celeb = { tier: number; mult: number; amount: number; forced?: boolean };
 type Tab = 'rules' | 'paytable' | 'fair' | 'history';
 
-declare global { interface Window { __hnw?: () => unknown } }
+declare global { interface Window { __hnw?: () => unknown; __renderMusic?: typeof renderOffline } }
+if (q.has('musiccheck')) window.__renderMusic = renderOffline; // offline music render for scripts/render-music.mjs
 window.__hnw = () => ({ balance: game.balance, bet: game.betCents, level: game.level, status: game.round?.status ?? 'idle', step: game.round?.step ?? 0, busy: game.busy, auto: game.autoRunning, clientSeed: game.clientSeed, nonce: game.nonce, history: game.history.map(h => ({ ...h })) });
 
 export default function App() {
