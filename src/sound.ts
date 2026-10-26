@@ -1,5 +1,5 @@
 // Procedural music and sound effects for Hubie's Night Walk. WebAudio only, no audio files.
-// Original groove in D minor at 96 to 112 BPM: kick, snare and hats, a walking sub bass, a four chord pad,
+// Rainy night groove in D minor at 84 to 100 BPM, over a constant rain bed: kick, snare and hats, a walking sub bass, a four chord pad,
 // a short lead hook, a 16th note arp and a tension layer. Layers join as Hubie climbs (intensity 0 to 4).
 // A lookahead scheduler books every 16th note against the AudioContext clock, so timing does not drift.
 // Every voice disconnects its nodes when it ends, and a polyphony cap protects slow phones.
@@ -78,16 +78,17 @@ export class Engine {
     this.bar++;
     // intensity eases toward the target one level per bar, so layers join on the bar line
     if (this.intensity < this.target) this.intensity++; else if (this.intensity > this.target) this.intensity--;
-    this.bpm = 98 + this.intensity * 3.5;
-    this.tone.frequency.setTargetAtTime(this.intensity >= 4 ? 12000 : 5200 + this.intensity * 1500, t, 0.4);
+    this.bpm = 84 + this.intensity * 4;
+    this.tone.frequency.setTargetAtTime(this.intensity >= 4 ? 9000 : 2600 + this.intensity * 1500, t, 0.4);
   }
   private tick(t: number, s: number) {
     const I = this.intensity, sec = Math.floor(this.bar / 8) % 2, chordSet = sec ? Engine.B : Engine.A, ch = chordSet[Math.floor(this.bar / 2) % 4];
     const sw = s % 2 === 1 ? (60 / this.bpm / 4) * (I < 3 ? 0.16 : 0.06) : 0; const T = t + sw;
     const breakdown = this.bar % 16 === 15 && I < 4; // one bar of air every 16 bars
+    this.drip(t);
     // drums
     if (!breakdown) {
-      const kickPat = I >= 3 ? [0, 4, 8, 12] : I >= 1 ? [0, 7, 10] : [0, 10];
+      const vary = this.bar % 4 === 3; const kickPat = I >= 3 ? (vary ? [0, 3, 8, 10, 14] : [0, 4, 8, 12]) : I >= 1 ? (vary ? [0, 6, 10, 11] : [0, 7, 10]) : [0, 10];
       if (kickPat.includes(s)) this.kick(t, s === 0 ? 0.95 : 0.8);
       if (I >= 1 && (s === 4 || s === 12)) this.snare(t);
       if (I >= 4 && s >= 12 && this.bar % 4 === 3) this.snare(t, 0.12 + (s - 12) * 0.05);
@@ -108,7 +109,24 @@ export class Engine {
     if (I >= 4 && s % 4 === 2) this.osc(N(81 + (this.bar % 2)), 'sine', t, 0.08, 0.02, this.duck);
   }
 
+  // ---------- rain bed ----------
+  rainOn = false;
+  startRain() {
+    if (this.rainOn) return; this.rainOn = true; const c = this.c;
+    const s = c.createBufferSource(); s.buffer = this.noise; s.loop = true;
+    const hp = c.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 500;
+    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2400;
+    const g = c.createGain(); g.gain.value = 0.11;
+    s.connect(hp).connect(lp).connect(g).connect(this.music); s.start();
+  }
+  /** Random drips on a gutter, called from the scheduler. */
+  private drip(t: number) { if (this.rnd() < 0.05) this.osc(1400 + this.rnd() * 1600, 'sine', t, 0.05, 0.03, this.music, { glide: 700 }); }
+
   // ---------- sound effects and stingers ----------
+  /** Heavy iron hatch pressed: a dull clunk with a metal click. */
+  sfxPress() { const t = this.now(); this.osc(150, 'square', t, 0.09, 0.12, this.sfx, { glide: 90, cut: 500, q: 3 }); this.hiss(t, 0.03, 0.12, 2600, 2, 'bandpass', this.sfx); }
+  /** Hatch flips into a gold chip: a bright double ping that climbs with the row. */
+  sfxChip(row: number) { const t = this.now() + 0.08; const b = 79 + (row % 8); this.hiss(t, 0.05, 0.08, 5000, 1, 'highpass', this.sfx); this.osc(N(b), 'sine', t, 0.25, 0.1, this.sfx); this.osc(N(b + 7), 'sine', t + 0.06, 0.35, 0.08, this.sfx); this.osc(N(b + 19), 'triangle', t + 0.06, 0.2, 0.025, this.sfx); }
   sfxPick() { const t = this.now(); this.osc(880, 'triangle', t, 0.05, 0.12, this.sfx); }
   sfxSafe(row: number) { const t = this.now(); const base = 62 + (row % 12); [0, 4, 7].forEach((d, i) => this.osc(N(base + d + 12), 'triangle', t + i * 0.045, 0.22, 0.12, this.sfx)); this.osc(N(base + 24), 'sine', t + 0.14, 0.4, 0.05, this.sfx); }
   sfxHop() { const t = this.now(); this.osc(300, 'sine', t, 0.18, 0.12, this.sfx, { glide: 720 }); }
@@ -117,14 +135,16 @@ export class Engine {
   sfxClick() { this.osc(1200, 'sine', this.now(), 0.03, 0.05, this.sfx); }
   /** Trap: the vent pops, a falling detuned slide, then a low thud. */
   stingTrap() { const t = this.now();
-    this.hiss(t, 0.5, 0.35, 900, 0.6, 'bandpass', this.sfx, 180);
+    this.hiss(t, 0.08, 0.4, 3000, 0.8, 'highpass', this.sfx); this.osc(90, 'square', t, 0.15, 0.2, this.sfx, { glide: 40, cut: 400 });
+    this.hiss(t + 0.05, 0.6, 0.25, 700, 0.6, 'bandpass', this.sfx, 160);
     this.osc(N(62), 'sawtooth', t + 0.05, 0.7, 0.1, this.sfx, { glide: N(38), cut: 1200 });
     this.osc(N(61), 'sawtooth', t + 0.05, 0.7, 0.08, this.sfx, { glide: N(37), cut: 1200, det: 18 });
     [57, 56, 53, 50].forEach((m, i) => this.osc(N(m), 'triangle', t + 0.35 + i * 0.13, 0.22, 0.09, this.sfx));
     this.osc(70, 'sine', t + 0.9, 0.4, 0.4, this.sfx, { glide: 40 });
   }
   /** Cash out: rising D major arpeggio with a bell on top. tier 0 to 4 adds length and weight. */
-  stingCash(tier = 0) { const t = this.now(); const seq = [62, 66, 69, 74, 78, 81, 86, 90].slice(0, 4 + tier);
+  stingCash(tier = 0) { const t = this.now();
+    for (let k = 0; k < 6 + tier * 3; k++) this.hiss(t + k * 0.035, 0.025, 0.1, 4000 + (k % 3) * 900, 4, 'bandpass', this.sfx); const seq = [62, 66, 69, 74, 78, 81, 86, 90].slice(0, 4 + tier);
     seq.forEach((m, i) => { this.osc(N(m), 'square', t + i * 0.07, 0.25, 0.05, this.sfx, { cut: 3000 }); this.osc(N(m + 12), 'sine', t + i * 0.07, 0.4, 0.04, this.sfx); });
     const end = t + seq.length * 0.07;
     [74, 78, 81].forEach(m => this.osc(N(m), 'triangle', end, 0.9 + tier * 0.3, 0.06, this.sfx, { att: 0.02, rel: 0.6 }));
@@ -152,14 +172,14 @@ export function unlock() {
   if (!eng!.playing) startMusic();
 }
 function startMusic() {
-  if (!eng || !ctx) return; eng.playing = true; eng.next = ctx.currentTime + 0.1; eng.step = 0;
+  if (!eng || !ctx) return; eng.playing = true; eng.startRain(); eng.next = ctx.currentTime + 0.1; eng.step = 0;
   timer = window.setInterval(() => { if (ctx && eng && ctx.state === 'running') eng.scheduleUntil(ctx.currentTime + LOOKAHEAD); }, 30);
 }
 export function setMuted(m: boolean) { muted = m; localStorage.setItem('hnw-muted', m ? '1' : '0'); if (ctx && eng) eng.out.gain.setTargetAtTime(master(), ctx.currentTime, 0.05); }
 export function setVolume(v: number) { volume = v; localStorage.setItem('hnw-vol', String(v)); if (ctx && eng) eng.out.gain.setTargetAtTime(master(), ctx.currentTime, 0.05); }
 /** 0 = idle, 1 = in a round, 2 to 4 = higher rows. */
 export function setIntensity(i: number) { if (eng) eng.target = Math.max(0, Math.min(4, i)); }
-export const sfx = new Proxy({} as Pick<Engine, 'sfxPick' | 'sfxSafe' | 'sfxHop' | 'sfxLand' | 'sfxBet' | 'sfxClick' | 'stingTrap' | 'stingCash'>, {
+export const sfx = new Proxy({} as Pick<Engine, 'sfxPick' | 'sfxSafe' | 'sfxPress' | 'sfxChip' | 'sfxHop' | 'sfxLand' | 'sfxBet' | 'sfxClick' | 'stingTrap' | 'stingCash'>, {
   get: (_t, k: string) => (...a: unknown[]) => { if (eng && ctx && ctx.state === 'running' && !muted) (eng as unknown as Record<string, (...x: unknown[]) => void>)[k](...a); },
 });
 document.addEventListener('visibilitychange', () => { if (!ctx) return; if (document.hidden) void ctx.suspend(); else { void ctx.resume(); if (eng) eng.next = Math.max(eng.next, ctx.currentTime + 0.05); } });
@@ -168,7 +188,7 @@ export function stopAll() { clearInterval(timer); if (eng) eng.playing = false; 
 /** Offline render for checks: plays the groove through every intensity and the stingers, returns the buffer. */
 export async function renderOffline(seconds = 48, sampleRate = 44100) {
   const oc = new OfflineAudioContext(2, Math.ceil(seconds * sampleRate), sampleRate);
-  const e = new Engine(oc, oc.destination, false); e.next = 0.05;
+  const e = new Engine(oc, oc.destination, false); e.next = 0.05; e.startRain();
   // Ramp intensity 0..4 across the render; schedule bar by bar so newBar sees the right target.
   const per = (seconds - 10) / 5;
   for (let t = 0; t < seconds - 10; t += 0.5) { e.target = Math.min(4, Math.floor(t / per)); e.scheduleUntil(t + 0.5); }

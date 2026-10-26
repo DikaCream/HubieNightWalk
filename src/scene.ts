@@ -1,44 +1,72 @@
-// PixiJS rooftop scene: night sky, two parallax skyline layers, the tower of rows and Hubie.
-// Perf notes (from the slot lag fix): the renderer resolution follows devicePixelRatio (capped) with autoDensity,
-// so the backing store matches the on screen pixels. Every tween is tracked and killed on reset,
-// and rows are destroyed with their children when a new round starts.
-import { Application, Assets, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
+// PixiJS rooftop scene, all procedural vector art: a rainy rooftop corner at night seen from the side.
+// Layers from back to front: sky and haze, a blurred far skyline, a crisper near skyline, water tower and
+// the Housebets billboard, clotheslines, the climbing roof tiers with iron hatches, Hubie, rain, foreground vents.
+// Perf: renderer resolution follows devicePixelRatio (capped) with autoDensity, every tween is tracked and killed
+// on reset, rows are destroyed with their children when a new round starts, rain is one Graphics per frame.
+import { Application, BlurFilter, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
 import gsap from 'gsap';
 import { isSummit, multAt, tilesOn, type Level } from './engine';
-import { ART } from './art';
+import { Hubie } from './hubie';
 
 export type TileState = 'idle' | 'active' | 'safe' | 'safePicked' | 'trap' | 'trapPicked' | 'dim';
-const CYAN = 0x02f7fd, GOLD = 0xffc83d, RED = 0xff4d3d, TEAL = 0x0b1920;
+const CYAN = 0x02f7fd, GOLD = 0xf3b63f, BG = 0x0d1217;
 const MOBILE = Math.min(screen.width, screen.height) < 600;
+const FONT = '"Arial Black", "Helvetica Neue", system-ui, sans-serif';
+const seeded = (s: number) => () => (s = (s * 16807) % 2147483647) / 2147483647;
+
+function glowTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d')!;
+  const g = x.createRadialGradient(64, 64, 0, 64, 64, 64); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.35, 'rgba(255,255,255,0.35)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = g; x.fillRect(0, 0, 128, 128); return Texture.from(c);
+}
+function vignetteTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d')!;
+  const g = x.createRadialGradient(128, 110, 40, 128, 128, 190); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.75)');
+  x.fillStyle = g; x.fillRect(0, 0, 256, 256); return Texture.from(c);
+}
+
+interface Tile { c: Container; g: Graphics; chip: Graphics; chipTxt: Text; txt: Text; txtShade: Text; prints: Graphics; w: number; h: number; mult: string }
+interface Row { c: Container; tiles: Tile[] }
+interface Drop { x: number; y: number; l: number; v: number }
+interface Puff { g: Graphics; vx: number; vy: number; life: number; max: number }
 
 export class Scene {
   app = new Application();
   ready: Promise<void>;
   private host: HTMLElement;
-  private sky = new Graphics(); private stars = new Graphics(); private far = new Graphics(); private near = new Graphics();
-  private world = new Container(); private rowsLayer = new Container();
-  private hubie!: Sprite; private tex: Record<string, Texture> = {};
-  private rows: { c: Container; tiles: Graphics[]; lights: Graphics; label: Text }[] = [];
-  level!: Level; states: TileState[][] = []; cleared = 0; // rows cleared (Hubie stands on row cleared - 1)
-  hubieTile = -1; private camY = 0; private tweens: gsap.core.Animation[] = [];
-  w = 0; h = 0; rowH = 80; padR = 0; fast = false;
+  private sky = new Graphics(); private far = new Container(); private farG = new Graphics(); private farWin = new Graphics();
+  private near = new Graphics(); private mid = new Container(); private lines = new Graphics(); private cloths: Graphics[] = [];
+  private billboard = new Container(); private neon!: Text; private neonGlow!: Sprite; private puddle = new Graphics();
+  private world = new Container(); private rowsLayer = new Container(); private wall = new Graphics();
+  private rain = new Graphics(); private fg = new Graphics(); private steam = new Container(); private vignette!: Sprite;
+  private beam = new Graphics(); private fireworks = new Container();
+  private glow!: Texture; private drops: Drop[] = []; private puffs: Puff[] = []; private ripples: { x: number; y: number; t: number }[] = [];
+  hubie!: Hubie; private hubieShadow = new Graphics(); private tag = new Container(); private tagBg = new Graphics(); private tagTxt!: Text;
+  private rows: Row[] = [];
+  level!: Level; states: TileState[][] = []; cleared = 0; hubieTile = -1;
+  private camY = 0; private tweens: gsap.core.Animation[] = [];
+  w = 0; h = 0; rowH = 80; pw = 320; cx = 160; fast = false; private cityBoost = 0;
   onLayout: () => void = () => {};
+  onFrame: (hx: number, hy: number) => void = () => {};
 
-  constructor(host: HTMLElement) {
-    this.host = host;
-    this.ready = this.init();
-  }
+  constructor(host: HTMLElement) { this.host = host; this.ready = this.init(); }
   private async init() {
-    const res = Math.min(devicePixelRatio || 1, MOBILE ? 2 : 2);
-    await this.app.init({ resizeTo: this.host, backgroundColor: TEAL, antialias: true, resolution: res, autoDensity: true, powerPreference: 'low-power' });
+    const res = Math.min(devicePixelRatio || 1, 2);
+    await this.app.init({ resizeTo: this.host, backgroundColor: BG, antialias: true, resolution: res, autoDensity: true, powerPreference: 'low-power' });
     this.host.appendChild(this.app.canvas);
-    for (const k of ['hubie_idle', 'hubie_react', 'hubie_bigwin']) this.tex[k] = await Assets.load(ART(k));
-    this.hubie = new Sprite(this.tex.hubie_idle); this.hubie.anchor.set(0.5, 1);
-    this.world.addChild(this.rowsLayer, this.hubie);
-    this.app.stage.addChild(this.sky, this.stars, this.far, this.near, this.world);
+    this.glow = glowTexture(); this.vignette = new Sprite(vignetteTexture());
+    this.far.addChild(this.farG, this.farWin); this.far.filters = [new BlurFilter({ strength: MOBILE ? 2 : 3, quality: 2 })];
+    this.neonGlow = new Sprite(this.glow); this.neonGlow.anchor.set(0.5); this.neonGlow.tint = CYAN;
+    this.neon = new Text({ text: 'HOUSEBETS', style: { fontFamily: FONT, fontWeight: '900', fontSize: 20, fill: 0xb8feff, letterSpacing: 2, dropShadow: { color: CYAN, blur: 8, distance: 0, alpha: 0.9, angle: 0 } } });
+    this.neon.anchor.set(0.5);
+    this.hubie = new Hubie();
+    this.tagTxt = new Text({ text: '', style: { fontFamily: FONT, fontWeight: '900', fontSize: 12, fill: 0xeafcff } }); this.tagTxt.anchor.set(0.5);
+    this.tag.addChild(this.tagBg, this.tagTxt); this.tag.visible = false;
+    this.world.addChild(this.wall, this.rowsLayer, this.hubieShadow, this.hubie, this.tag);
+    this.app.stage.addChild(this.sky, this.fireworks, this.far, this.near, this.mid, this.lines, this.beam, this.world, this.steam, this.fg, this.rain, this.vignette);
     this.app.renderer.on('resize', () => this.layout());
     this.app.ticker.maxFPS = 60;
-    this.app.ticker.add(() => this.idle());
+    this.app.ticker.add(t => this.frame(t.deltaTime));
   }
   private track<T extends gsap.core.Animation>(t: T) {
     this.tweens.push(t); const prev = t.eventCallback('onComplete') as (() => void) | null;
@@ -46,163 +74,328 @@ export class Scene {
     return t;
   }
   private d(s: number) { return this.fast ? s * 0.45 : s; }
-  killAll() { for (const t of this.tweens) t.kill(); this.tweens.length = 0; gsap.killTweensOf([this.hubie, this.hubie?.scale, this.world]); }
+  killAll() { for (const t of this.tweens) t.kill(); this.tweens.length = 0; if (this.hubie) gsap.killTweensOf([this.hubie, this.hubie.scale, this.hubie.hat, this.hubie.armR, this.hubie.armL, this.world]); }
 
   // ---------- geometry ----------
-  private rowY(r: number) { return -r * this.rowH; } // top surface of row r (row -1 is the street ledge)
-  private tileW(n: number) { const avail = this.w - this.padR - 64; return n === 1 ? Math.min(avail, 280) : Math.min(118, (avail - (n - 1) * 10) / n); }
-  tileX(r: number, i: number) { const n = tilesOn(this.level, r); const tw = this.tileW(n); const cx = 52 + (this.w - this.padR - 52) / 2; return cx + (i - (n - 1) / 2) * (tw + 10); }
-  private camFor(cleared: number) { return this.h * 0.74 - this.rowY(cleared - 1); }
+  private rowY(r: number) { return -r * this.rowH; } // baseline (front edge) of roof tier r; tier -1 is the rooftop floor
+  private tileW(n: number) { return n === 1 ? Math.min(this.pw * 0.8, 300) : Math.min(112, (this.pw - (n - 1) * 9) / n); }
+  private tileH(n: number) { return Math.min(this.rowH * 0.56, this.tileW(n === 1 ? 3 : n) * 0.66); }
+  tileX(r: number, i: number) { const n = tilesOn(this.level, r); const tw = this.tileW(n); return this.cx + (i - (n - 1) / 2) * (tw + 9); }
+  private tileCY(r: number) { return this.rowY(r) - this.tileH(tilesOn(this.level, r)) / 2 - 6; }
+  private feetY(r: number) { return r < 0 ? this.rowY(-1) - this.rowH * 0.35 : this.tileCY(r) + this.tileH(tilesOn(this.level, r)) * 0.12; }
+  private camFor(cleared: number) { return this.h * 0.7 - this.feetY(cleared - 1); }
+  private idleX() { return this.cx - Math.min(this.pw * 0.32, 110); }
   /** Screen rectangle of a tile (CSS pixels relative to the canvas). */
-  tileRect(r: number, i: number) { const n = tilesOn(this.level, r); const tw = this.tileW(n), th = this.rowH * 0.52; const x = this.tileX(r, i) - tw / 2, y = this.camY + this.rowY(r) - th; return { x, y, w: tw, h: th }; }
+  tileRect(r: number, i: number) { const n = tilesOn(this.level, r); const tw = this.tileW(n), th = this.tileH(n); return { x: this.tileX(r, i) - tw / 2, y: this.camY + this.tileCY(r) - th / 2, w: tw, h: th }; }
 
   layout() {
     this.w = this.app.screen.width; this.h = this.app.screen.height;
-    this.rowH = Math.max(62, Math.min(96, this.h / 5.4));
-    this.drawSky(); this.drawSkyline();
+    this.rowH = Math.max(70, Math.min(104, this.h / 5));
+    this.pw = Math.min(this.w - 20, 470); this.cx = this.w / 2;
+    this.drawSky(); this.drawCity(); this.drawMid(); this.drawFg();
+    this.vignette.width = this.w; this.vignette.height = this.h;
     if (this.level) { this.buildRows(); this.placeHubie(); }
     this.world.y = this.camY = this.camFor(this.cleared);
-    this.parallax();
+    this.parallax(); this.seedRain();
     this.onLayout();
   }
+
+  // ---------- backdrop ----------
   private drawSky() {
-    const { w, h } = this; const g = this.sky.clear();
-    const bands = 18; for (let i = 0; i < bands; i++) { const t = i / bands; const c = lerpColor(0x05121a, 0x0f2f3a, t); g.rect(0, (h * i) / bands, w, h / bands + 1).fill(c); }
-    g.circle(w * 0.78, h * 0.16, Math.min(w, h) * 0.06).fill({ color: 0xe8fbff, alpha: 0.9 });
-    g.circle(w * 0.78, h * 0.16, Math.min(w, h) * 0.11).fill({ color: CYAN, alpha: 0.06 });
-    const s = this.stars.clear(); let seed = 11; const r = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-    for (let i = 0; i < 70; i++) s.circle(r() * w, r() * h * 0.7, r() < 0.15 ? 1.6 : 0.9).fill({ color: r() < 0.2 ? GOLD : 0xbff9ff, alpha: 0.4 + r() * 0.5 });
+    const { w, h } = this; const g = this.sky.clear(); const N = 24;
+    for (let i = 0; i < N; i++) { const t = i / N; g.rect(0, (h * 1.4 * i) / N - h * 0.2, w, (h * 1.4) / N + 1).fill(mix(0x0b0f14, 0x232a31, t * t)); }
+    g.ellipse(w * 0.5, h * 0.62, w * 0.9, h * 0.22).fill({ color: 0x3a3127, alpha: 0.25 });
+    g.circle(w * 0.2, h * 0.12, 18).fill({ color: 0xc9d4dc, alpha: 0.12 }).circle(w * 0.2, h * 0.12, 40).fill({ color: 0xc9d4dc, alpha: 0.04 });
+    const r = seeded(31);
+    for (let i = 0; i < 9; i++) g.ellipse(r() * w, h * (0.05 + r() * 0.35), 60 + r() * 120, 10 + r() * 14).fill({ color: 0x2c343c, alpha: 0.25 });
   }
-  private drawSkyline() {
-    const { w, h } = this; let seed = 5; const r = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-    for (const [g, base, col, win, hmin, hmax] of [[this.far, h * 0.95, 0x0d2530, 0.25, 0.25, 0.55], [this.near, h * 1.02, 0x081820, 0.55, 0.18, 0.42]] as const) {
-      g.clear(); let x = -10;
-      while (x < w + 10) {
-        const bw = 26 + r() * 52, bh = h * (hmin + r() * (hmax - hmin)); const top = base - bh;
-        g.rect(x, top, bw, bh + h).fill(col);
-        if (r() < 0.3) g.rect(x + bw * 0.45, top - 14, 2, 14).fill(col);
-        for (let wy = top + 8; wy < base; wy += 11) for (let wx = x + 5; wx < x + bw - 6; wx += 9) if (r() < 0.22) g.rect(wx, wy, 4, 5).fill({ color: r() < 0.7 ? CYAN : GOLD, alpha: win * (0.3 + r() * 0.7) });
-        if (r() < 0.25) g.rect(x + 3, top + 4, bw - 6, 3).fill({ color: r() < 0.5 ? CYAN : 0xff3da8, alpha: 0.7 });
-        x += bw + 2 + r() * 8;
+  private drawCity() {
+    const { w, h } = this; const base = h * 0.66; const r = seeded(7);
+    const g = this.farG.clear(), win = this.farWin.clear(); let x = -20;
+    while (x < w + 20) {
+      const bw = 24 + r() * 46, bh = h * (0.12 + r() * 0.3), top = base - bh;
+      g.rect(x, top, bw, h).fill(0x1b222a);
+      if (r() < 0.25) g.rect(x + bw * 0.4, top - 18, 2, 18).fill(0x1b222a).circle(x + bw * 0.4 + 1, top - 18, 2).fill({ color: 0xc0573f, alpha: 0.6 });
+      for (let wy = top + 6; wy < base + h * 0.3; wy += 9) for (let wx = x + 4; wx < x + bw - 5; wx += 7) if (r() < 0.2) win.rect(wx, wy, 3, 4).fill({ color: r() < 0.65 ? 0xcfae6e : 0x8ea8bb, alpha: 0.2 + r() * 0.35 });
+      x += bw + r() * 6;
+    }
+    const n = this.near.clear(); x = -10; const nb = h * 0.82;
+    while (x < w + 10) {
+      const bw = 40 + r() * 70, bh = h * (0.1 + r() * 0.22), top = nb - bh;
+      n.rect(x, top, bw, h).fill(0x12171d);
+      n.rect(x, top, bw, 2).fill({ color: 0x2f3842, alpha: 0.8 });
+      for (let wy = top + 10; wy < nb + h * 0.2; wy += 14) for (let wx = x + 6; wx < x + bw - 8; wx += 12) if (r() < 0.12) n.rect(wx, wy, 5, 7).fill({ color: r() < 0.7 ? 0xb8915a : 0x7590a3, alpha: 0.25 + r() * 0.2 });
+      x += bw + 4 + r() * 20;
+    }
+  }
+  private drawMid() {
+    const { w, h } = this; this.mid.removeChildren().forEach(c => c.destroy({ children: true }));
+    const SIL = 0x161c22, EDGE = 0x36414b;
+    // water tower on the left
+    const wt = new Graphics(); const tx = Math.max(46, w * 0.12), tb = h * 0.6, tw = Math.min(70, w * 0.16), th = tw * 0.9;
+    for (const lx of [-0.42, -0.14, 0.14, 0.42]) wt.moveTo(tx + lx * tw, tb - th * 0.05).lineTo(tx + lx * tw * 1.25, tb + h * 0.2).stroke({ width: 3, color: SIL });
+    wt.moveTo(tx - tw * 0.5, tb + h * 0.08).lineTo(tx + tw * 0.5, tb + h * 0.13).moveTo(tx + tw * 0.5, tb + h * 0.08).lineTo(tx - tw * 0.5, tb + h * 0.13).stroke({ width: 1.5, color: SIL });
+    wt.rect(tx - tw / 2, tb - th, tw, th).fill(SIL);
+    for (let k = 1; k < 4; k++) wt.rect(tx - tw / 2, tb - th + (th * k) / 4, tw, 1.5).fill({ color: EDGE, alpha: 0.6 });
+    wt.rect(tx + tw / 2 - 3, tb - th, 2, th).fill({ color: 0x56636e, alpha: 0.5 });
+    wt.poly([tx - tw * 0.58, tb - th, tx, tb - th - tw * 0.42, tx + tw * 0.58, tb - th]).fill(0x12171c);
+    wt.circle(tx, tb - th - tw * 0.42, 2.5).fill({ color: 0xd04a35, alpha: 0.8 });
+    this.mid.addChild(wt);
+    // billboard on the right, Housebets neon
+    const bb = this.billboard; bb.removeChildren(); const bw = Math.min(190, w * 0.44), bh = bw * 0.36, bx = w - bw / 2 - Math.max(10, w * 0.05), by = h * 0.2;
+    const frame = new Graphics();
+    for (const sx of [-0.3, 0.3]) frame.rect(bx + sx * bw - 2, by + bh / 2, 4, h * 0.5).fill(SIL);
+    frame.moveTo(bx - bw * 0.3, by + bh / 2 + 20).lineTo(bx + bw * 0.3, by + bh / 2 + 60).stroke({ width: 1.5, color: SIL });
+    frame.rect(bx - bw / 2 - 6, by + bh / 2 + 4, bw + 12, 3).fill(SIL);
+    frame.roundRect(bx - bw / 2, by - bh / 2, bw, bh, 4).fill(0x0e1318).stroke({ width: 2, color: 0x232b33 });
+    for (let k = 0; k < 4; k++) frame.circle(bx - bw * 0.36 + k * bw * 0.24, by + bh / 2 + 1, 1.6).fill({ color: 0xffe2a8, alpha: 0.5 });
+    this.neonGlow.position.set(bx, by); this.neonGlow.width = bw * 1.5; this.neonGlow.height = bh * 2.4; this.neonGlow.alpha = 0.12;
+    this.neon.style.fontSize = Math.round(bw * 0.12); this.neon.position.set(bx, by - bh * 0.08);
+    const sub = new Text({ text: 'NIGHT WALK', style: { fontFamily: FONT, fontWeight: '700', fontSize: Math.round(bw * 0.055), fill: 0x8b9aa6, letterSpacing: 4 } }); sub.anchor.set(0.5); sub.position.set(bx, by + bh * 0.27);
+    bb.addChild(frame, this.neonGlow, this.neon, sub); this.mid.addChild(bb);
+    // chimney stacks between the two
+    const ch = new Graphics(); const r = seeded(19);
+    for (let k = 0; k < 3; k++) { const x = w * (0.3 + k * 0.17) + r() * 20, top = h * (0.5 + r() * 0.08); ch.rect(x, top, 12 + r() * 8, h).fill(0x14191f).rect(x - 2, top, 16 + r() * 8, 4).fill(0x1f262d); }
+    this.mid.addChild(ch);
+    // clotheslines: catenary cables from the tower to the billboard post with hanging laundry
+    const L = this.lines.clear(); this.cloths.forEach(c => c.destroy()); this.cloths = [];
+    for (const [y0, y1, sag] of [[h * 0.42, h * 0.36, 26], [h * 0.47, h * 0.43, 20]]) {
+      const x0 = tx + tw * 0.5, x1 = bx - bw * 0.3; L.moveTo(x0, y0).quadraticCurveTo((x0 + x1) / 2, (y0 + y1) / 2 + sag * 2, x1, y1).stroke({ width: 1.2, color: 0x2f3841 });
+      for (let k = 1; k < 4; k++) {
+        const t = k / 4 + (r() - 0.5) * 0.08; const px = (1 - t) ** 2 * x0 + 2 * (1 - t) * t * ((x0 + x1) / 2) + t * t * x1, py = (1 - t) ** 2 * y0 + 2 * (1 - t) * t * ((y0 + y1) / 2 + sag * 2) + t * t * y1;
+        const c = new Graphics(); const cw = 10 + r() * 10, chh = 12 + r() * 12; const col = [0x3d3640, 0x34403f, 0x463b33, 0x2f3846][Math.floor(r() * 4)];
+        c.rect(-cw / 2, 0, cw, chh).fill(col).rect(-cw / 2, 0, cw, 2).fill({ color: 0x000000, alpha: 0.3 }).rect(-cw / 2 - 1, -1, 2, 3).fill(0x6b6255).rect(cw / 2 - 1, -1, 2, 3).fill(0x6b6255);
+        c.position.set(px, py); this.lines.addChild(c); this.cloths.push(c);
       }
     }
   }
-  private parallax() { const dy = this.world.y - this.camFor(0); this.far.y = dy * 0.12; this.near.y = dy * 0.3; this.stars.y = dy * 0.04; }
+  private drawFg() {
+    const { w, h } = this; const g = this.fg.clear();
+    // foreground vent pipes at the bottom corners, darker than everything
+    const vent = (x: number, s: number) => { const b = h + 4; g.rect(x - 9 * s, b - 56 * s, 18 * s, 60 * s).fill(0x0a0d10).rect(x - 9 * s, b - 56 * s, 3 * s, 60 * s).fill({ color: 0x3a4550, alpha: 0.35 });
+      g.ellipse(x, b - 58 * s, 15 * s, 5 * s).fill(0x0c1014).rect(x - 13 * s, b - 72 * s, 26 * s, 12 * s).fill(0x0a0d10).ellipse(x, b - 72 * s, 14 * s, 4 * s).fill(0x12171c); };
+    vent(Math.max(14, w * 0.03), MOBILE ? 0.7 : 1); vent(w - Math.max(18, w * 0.04), MOBILE ? 0.85 : 1.2);
+    this.vents = [[Math.max(14, w * 0.03), h - 72 * (MOBILE ? 0.7 : 1)], [w - Math.max(18, w * 0.04), h - 72 * (MOBILE ? 0.85 : 1.2)]];
+  }
+  private vents: number[][] = [];
+  private parallax() { const dy = this.world.y - this.camFor(0); this.far.y = dy * 0.05; this.near.y = dy * 0.1; this.mid.y = this.lines.y = dy * 0.18; this.sky.y = dy * 0.02; this.fg.y = this.steam.y = dy * 0.6; }
+  private seedRain() { const n = Math.min(MOBILE ? 110 : 220, Math.round((this.w * this.h) / 2600)); this.drops = Array.from({ length: n }, () => ({ x: Math.random() * (this.w + 60), y: Math.random() * this.h, l: 8 + Math.random() * 14, v: 9 + Math.random() * 7 })); }
 
-  // ---------- rows ----------
+  // ---------- rows of hatches ----------
   setLevel(lv: Level) {
     this.killAll(); this.level = lv; this.cleared = 0; this.hubieTile = -1;
     this.states = Array.from({ length: lv.rows }, (_, r) => new Array(tilesOn(lv, r)).fill('idle'));
-    this.hubie.texture = this.tex.hubie_idle; this.hubie.rotation = 0; this.hubie.alpha = 1;
+    this.tag.visible = false; this.hubie.alpha = 1; this.hubie.rotation = 0; this.hubie.mode = 'idle';
+    this.hubie.hat.position.set(1, -70); this.hubie.hat.rotation = -0.1;
     this.layout();
   }
   private buildRows() {
     for (const r of this.rows) r.c.destroy({ children: true }); this.rows = [];
-    const lv = this.level;
-    // street ledge (start)
-    const ledge = new Container(); const lg = new Graphics();
-    lg.rect(0, this.rowY(-1), this.w, this.rowH * 2).fill(0x07141a).rect(0, this.rowY(-1), this.w, 3).fill({ color: CYAN, alpha: 0.5 });
-    ledge.addChild(lg); this.rowsLayer.addChild(ledge);
-    this.rows.push({ c: ledge, tiles: [], lights: new Graphics(), label: new Text() });
-    for (let r = 0; r < lv.rows; r++) {
-      const c = new Container(); const y = this.rowY(r);
-      const beam = new Graphics(); beam.rect(36, y + 2, this.w - this.padR - 40, 5).fill(0x14323d).rect(36, y + 7, this.w - this.padR - 40, 2).fill({ color: 0x000000, alpha: 0.4 });
-      for (let x = 60; x < this.w - this.padR - 10; x += 70) beam.rect(x, y + 9, 4, this.rowH - 12).fill({ color: 0x0f2832, alpha: 0.9 });
-      const lights = new Graphics(); for (let x = 44; x < this.w - this.padR - 8; x += 16) lights.circle(x, y + 4.5, 1.8).fill(isSummit(lv, r) ? GOLD : CYAN); lights.alpha = 0.12;
-      const label = new Text({ text: fmtMult(multAt(lv, r + 1)), style: { fontFamily: 'system-ui, sans-serif', fontWeight: '800', fontSize: Math.max(11, Math.round(this.rowH * 0.15)), fill: isSummit(lv, r) ? GOLD : 0x7fdfe4 } });
-      label.anchor.set(0, 0); label.position.set(8, y + 11); label.alpha = 0.8;
-      c.addChild(beam, lights, label);
-      const tiles: Graphics[] = [];
-      for (let i = 0; i < tilesOn(lv, r); i++) { const g = new Graphics(); c.addChild(g); tiles.push(g); }
-      this.rowsLayer.addChild(c); this.rows.push({ c, tiles, lights, label });
-      if (r < this.cleared) lights.alpha = 1;
-      tiles.forEach((_, i) => this.drawTile(r, i));
-      if (isSummit(lv, r)) {
-        const { x, w, h } = this.tileRectWorld(r, 0);
-        const t = new Text({ text: 'SUMMIT 10,000x', style: { fontFamily: 'system-ui, sans-serif', fontWeight: '900', fontSize: Math.round(h * 0.34), fill: GOLD, letterSpacing: 1 } });
-        t.anchor.set(0.5); t.position.set(x + w / 2, y - h / 2); c.addChild(t);
+    const lv = this.level, { rowH, pw, cx } = this; const wl = cx - pw / 2 - 8, ww = pw + 16;
+    // the building core behind the tiers: wet brick, very low contrast
+    const wall = this.wall.clear(); const top = this.rowY(lv.rows) - rowH * 0.4, bot = this.rowY(-1) + this.h;
+    wall.rect(wl + 6, top, ww - 12, bot - top).fill(0x141a20);
+    const r = seeded(3);
+    for (let y = top; y < bot; y += 9) { const off = (Math.floor(y / 9) % 2) * 11; for (let x = wl + 6 + off; x < wl + ww - 8; x += 22) if (r() < 0.55) wall.rect(x, y, 20, 7).fill({ color: r() < 0.5 ? 0x1a2128 : 0x171d23, alpha: 1 }); }
+    wall.rect(wl + 6, top, 3, bot - top).fill({ color: 0x2c3640, alpha: 0.5 });
+    // rooftop floor with a puddle
+    const floor = new Container(); const fl = new Graphics(); const fy = this.rowY(-1);
+    fl.rect(-20, fy - rowH * 0.62, this.w + 40, rowH * 0.62 + this.h).fill(0x161c22);
+    fl.rect(-20, fy - rowH * 0.62, this.w + 40, 2).fill({ color: 0x46525d, alpha: 0.6 });
+    for (let x = -20; x < this.w + 20; x += 44) fl.rect(x, fy - rowH * 0.62, 1, rowH * 0.62).fill({ color: 0x000000, alpha: 0.25 });
+    fl.rect(-20, fy, this.w + 40, 10).fill(0x0e1216);
+    floor.addChild(fl, this.puddle); this.drawPuddle(fy - rowH * 0.22);
+    this.rowsLayer.addChild(floor); this.rows.push({ c: floor, tiles: [] });
+    for (let ri = 0; ri < lv.rows; ri++) {
+      const c = new Container(); const y = this.rowY(ri); const n = tilesOn(lv, ri), th = this.tileH(n);
+      const ledge = new Graphics(); const sh = th + 14;
+      ledge.rect(wl, y - sh, ww, sh).fill(0x1b2229).rect(wl, y - sh, ww, 1.5).fill({ color: 0x4a5560, alpha: 0.55 });
+      ledge.rect(wl, y, ww, 7).fill(0x0d1115).rect(wl, y + 7, ww, 4).fill({ color: 0x000000, alpha: 0.35 });
+      ledge.rect(wl + ww * 0.1, y - sh + 3, ww * 0.5, 1).fill({ color: 0x8aa2b5, alpha: 0.08 });
+      c.addChild(ledge);
+      const tiles: Tile[] = [];
+      for (let i = 0; i < n; i++) {
+        const tc = new Container(); const g = new Graphics(), chip = new Graphics(), prints = new Graphics();
+        const mult = isSummit(lv, ri) ? 'SUMMIT  10,000x' : fmtMult(multAt(lv, ri + 1));
+        const fs = Math.round(Math.min(th * 0.3, (this.tileW(n) - 14) / (mult.length * 0.62)));
+        const txt = new Text({ text: mult, style: { fontFamily: FONT, fontWeight: '900', fontSize: fs, fill: 0x9aa4ad } }); txt.anchor.set(0.5);
+        const txtShade = new Text({ text: mult, style: { fontFamily: FONT, fontWeight: '900', fontSize: fs, fill: 0x000000 } }); txtShade.anchor.set(0.5); txtShade.y = -1.2; txtShade.alpha = 0.7;
+        const chipTxt = new Text({ text: mult.replace('SUMMIT  ', ''), style: { fontFamily: FONT, fontWeight: '900', fontSize: Math.round(fs * 0.92), fill: 0x4a2a00 } }); chipTxt.anchor.set(0.5);
+        tc.addChild(g, txtShade, txt, chip, chipTxt, prints); tc.position.set(this.tileX(ri, i), this.tileCY(ri));
+        c.addChild(tc); tiles.push({ c: tc, g, chip, chipTxt, txt, txtShade, prints, w: this.tileW(n), h: th, mult });
       }
+      this.rowsLayer.addChild(c); this.rows.push({ c, tiles });
+      tiles.forEach((_, i) => this.drawTile(ri, i));
     }
   }
+  private drawPuddle(y: number) {
+    const p = this.puddle.clear(); const x = this.cx + this.pw * 0.18, rw = Math.min(120, this.pw * 0.3);
+    p.ellipse(x, y, rw, 9).fill({ color: 0x070a0d, alpha: 0.85 });
+    p.rect(x - rw * 0.5, y - 3, rw * 0.5, 2).fill({ color: CYAN, alpha: 0.25 }).rect(x + rw * 0.1, y + 1, rw * 0.35, 1.5).fill({ color: 0xcfae6e, alpha: 0.2 });
+    this.puddleAt = { x, y, rw };
+  }
+  private puddleAt = { x: 0, y: 0, rw: 0 };
   private R(r: number) { return this.rows[r + 1]; }
   drawTile(r: number, i: number) {
-    const row = this.R(r); if (!row) return; const g = row.tiles[i].clear(); const st = this.states[r][i];
-    const { x, w, h } = this.tileRectWorld(r, i); const y = this.rowY(r) - h; const summit = isSummit(this.level, r);
-    const fill = st === 'safePicked' ? 0x0f5a63 : st === 'trap' || st === 'trapPicked' ? 0x3a1216 : st === 'safe' ? 0x0e3540 : 0x10262f;
-    const edge = st === 'trapPicked' || st === 'trap' ? RED : summit ? GOLD : CYAN;
-    const ea = st === 'active' ? 0.95 : st === 'idle' ? 0.28 : st === 'dim' ? 0.12 : st === 'safe' ? 0.45 : 0.9;
-    if (st === 'active' || st === 'safePicked' || st === 'trapPicked') g.roundRect(x - 4, y - 4, w + 8, h + 8, 12).fill({ color: edge, alpha: 0.12 });
-    g.roundRect(x, y, w, h, 9).fill(fill).stroke({ width: st === 'active' ? 2.5 : 1.5, color: edge, alpha: ea });
-    if (summit) {
-      g.roundRect(x + 8, y + 7, w - 16, h - 14, 6).stroke({ width: 1, color: GOLD, alpha: 0.4 });
-      if (st === 'safePicked') g.roundRect(x + 8, y + 7, w - 16, h - 14, 6).fill({ color: GOLD, alpha: 0.35 });
-    } else if (st === 'safePicked' || st === 'safe') {
-      // open skylight: glowing glass panes
-      const a = st === 'safePicked' ? 0.85 : 0.3;
-      g.rect(x + 7, y + 6, w / 2 - 10, h - 12).fill({ color: CYAN, alpha: a * 0.6 }).rect(x + w / 2 + 3, y + 6, w / 2 - 10, h - 12).fill({ color: CYAN, alpha: a * 0.45 });
-    } else if (st === 'trap' || st === 'trapPicked') {
-      // busted vent: bent grille and a crack
-      for (let k = 1; k < 4; k++) g.moveTo(x + 8, y + (h * k) / 4).lineTo(x + w - 8, y + (h * k) / 4 + (k % 2 ? 4 : -4)).stroke({ width: 2, color: RED, alpha: st === 'trapPicked' ? 0.9 : 0.5 });
-      g.moveTo(x + w * 0.3, y + 3).lineTo(x + w * 0.45, y + h * 0.5).lineTo(x + w * 0.38, y + h - 3).stroke({ width: 1.5, color: 0xffb199, alpha: 0.8 });
+    const row = this.R(r); if (!row) return; const t = row.tiles[i]; const st = this.states[r][i]; const summit = isSummit(this.level, r);
+    const g = t.g.clear(); const { w, h } = t; const hw = w / 2, hh = h / 2, R = Math.min(12, h * 0.24);
+    const open = st === 'safe' || st === 'safePicked', broken = st === 'trap' || st === 'trapPicked', active = st === 'active';
+    g.roundRect(-hw + 1, -hh + 7, w, h, R).fill({ color: 0x000000, alpha: 0.5 });
+    g.roundRect(-hw, -hh + 4, w, h, R).fill(0x0f1215);
+    const rim = summit ? 0x5b4a24 : active ? 0x404952 : 0x2d3339;
+    g.roundRect(-hw, -hh, w, h, R).fill(rim);
+    g.roundRect(-hw + 1.5, -hh + 1, w - 3, h * 0.4, R).fill({ color: 0xffffff, alpha: active ? 0.1 : 0.05 });
+    const ix = -hw + 5, iy = -hh + 5, iw = w - 10, ih = h - 10, ir = R * 0.7;
+    if (open) {
+      g.roundRect(ix, iy, iw, ih, ir).fill(0x07090b).roundRect(ix, iy, iw, 5, ir).fill({ color: 0x000000, alpha: 0.6 });
     } else {
-      // closed vent grille
-      for (let k = 1; k < 4; k++) g.moveTo(x + 9, y + (h * k) / 4).lineTo(x + w - 9, y + (h * k) / 4).stroke({ width: 2, color: st === 'active' ? CYAN : 0x2a5561, alpha: st === 'active' ? 0.55 : 0.8 });
+      const plate = summit ? (active ? 0x7a6430 : 0x5f4f2a) : broken ? 0x2b2725 : active ? 0x4d565f : 0x3b4249;
+      g.roundRect(ix, iy, iw, ih, ir).fill(plate);
+      g.roundRect(ix, iy, iw, 5, ir).fill({ color: 0x000000, alpha: 0.38 }).rect(ix + 4, iy + ih - 2, iw - 8, 1.5).fill({ color: 0xffffff, alpha: 0.12 });
+      const rr = seeded(r * 31 + i * 7 + 5);
+      for (let yy = iy + 8; yy < iy + ih - 5; yy += 7) for (let xx = ix + 6 + ((yy / 7) % 2) * 4; xx < ix + iw - 6; xx += 9) g.moveTo(xx, yy).lineTo(xx + 3, yy - 2).stroke({ width: 1, color: 0x000000, alpha: 0.18 + rr() * 0.08 });
+      for (const [bx, by] of [[ix + 4, iy + 4], [ix + iw - 4, iy + 4], [ix + 4, iy + ih - 4], [ix + iw - 4, iy + ih - 4]]) g.circle(bx, by, 2.3).fill(0x1b1f23).circle(bx - 0.6, by - 0.6, 1).fill({ color: 0xffffff, alpha: 0.25 });
+      if (broken) {
+        const cr = seeded(r * 13 + i + 1);
+        g.poly([-w * 0.12, -h * 0.1, w * 0.02, -h * 0.2, w * 0.14, -h * 0.04, w * 0.08, h * 0.16, -w * 0.06, h * 0.14, -w * 0.16, h * 0.04]).fill(0x050404);
+        if (st === 'trapPicked') g.poly([-w * 0.07, -h * 0.04, w * 0.03, -h * 0.1, w * 0.09, 0, w * 0.04, h * 0.09, -w * 0.06, h * 0.07]).fill({ color: 0xff6a2a, alpha: 0.75 });
+        for (let k = 0; k < 6; k++) { const a = (k / 6) * Math.PI * 2 + cr(); let px = Math.cos(a) * w * 0.12, py = Math.sin(a) * h * 0.14; g.moveTo(px, py); for (let s = 0; s < 3; s++) { px += Math.cos(a + (cr() - 0.5)) * w * 0.09; py += Math.sin(a + (cr() - 0.5)) * h * 0.1; g.lineTo(px, py); } g.stroke({ width: 1.6, color: 0x050404, alpha: 0.9 }); }
+      }
     }
+    if (active) { g.roundRect(-hw - 2, -hh - 2, w + 4, h + 4, R + 2).stroke({ width: 5, color: summit ? GOLD : CYAN, alpha: 0.12 }); g.roundRect(-hw - 0.5, -hh - 0.5, w + 1, h + 1, R).stroke({ width: 1.8, color: summit ? GOLD : CYAN, alpha: 0.9 }); }
+    // engraved or embossed multiplier
+    const showTxt = !open && st !== 'trapPicked';
+    t.txt.visible = t.txtShade.visible = showTxt;
+    t.txt.style.fill = summit ? (active ? 0xffe7a6 : 0xcfb070) : active ? 0xf0fdff : broken ? 0x5d5752 : 0xa2acb5;
+    t.txt.alpha = st === 'dim' ? 0.5 : 1;
+    // gold Housebets chip seated in the open hatch
+    const c = t.chip.clear(); t.chip.visible = t.chipTxt.visible = open;
+    if (open) {
+      const rx = Math.min(hw - 7, hh * 1.5), ry = hh - 6;
+      c.ellipse(0, 3, rx, ry).fill(0x8a5a10);
+      c.ellipse(0, 0, rx, ry).fill(GOLD);
+      for (let k = 0; k < 8; k++) { const a = (k / 8) * Math.PI * 2 + 0.2; c.ellipse(Math.cos(a) * rx * 0.86, Math.sin(a) * ry * 0.86, rx * 0.1, ry * 0.12).fill(0xfff1c9); }
+      c.ellipse(0, 0, rx * 0.7, ry * 0.68).fill(0xdc9b22).ellipse(0, 0, rx * 0.7, ry * 0.68).stroke({ width: 1.4, color: 0xffe08a });
+      c.ellipse(-rx * 0.3, -ry * 0.45, rx * 0.25, ry * 0.12).fill({ color: 0xffffff, alpha: 0.35 });
+      t.chip.alpha = t.chipTxt.alpha = st === 'safePicked' ? 1 : 0.4;
+    }
+    t.c.alpha = st === 'dim' ? 0.55 : st === 'trap' ? 0.7 : 1;
   }
-  private tileRectWorld(r: number, i: number) { const n = tilesOn(this.level, r); const w = this.tileW(n), h = this.rowH * 0.52; return { x: this.tileX(r, i) - w / 2, w, h }; }
   setState(r: number, i: number, s: TileState) { if (!this.states[r]) return; this.states[r][i] = s; this.drawTile(r, i); }
   setActiveRow(r: number | null) {
     this.states.forEach((row, rr) => row.forEach((s, i) => { if (s === 'active' && rr !== r) this.setState(rr, i, 'idle'); }));
     if (r !== null && r < this.level.rows) this.states[r].forEach((s, i) => { if (s === 'idle') this.setState(r, i, 'active'); });
   }
-  private placeHubie() {
-    this.hubie.height = this.rowH * 1.1; this.hubie.scale.x = this.hubie.scale.y;
-    const r = this.cleared - 1; this.hubie.x = r < 0 ? 52 + (this.w - this.padR - 52) / 2 : this.tileX(r, Math.max(0, this.hubieTile));
-    this.hubie.y = this.rowY(r) - (r < 0 ? 0 : this.rowH * 0.52) + 2;
+  /** Pointer hover and press feedback from the DOM tile buttons. */
+  hover(i: number, on: boolean) { const t = this.R(this.cleared)?.tiles[i]; if (!t || this.states[this.cleared][i] !== 'active') return; gsap.to(t.c, { y: this.tileCY(this.cleared) - (on ? 3 : 0), duration: 0.12 }); gsap.to(t.c.scale, { x: on ? 1.04 : 1, y: on ? 1.04 : 1, duration: 0.12 }); }
+  press(i: number) { const t = this.R(this.cleared)?.tiles[i]; if (!t) return; gsap.fromTo(t.c.scale, { x: 0.93, y: 0.9 }, { x: 1, y: 1, duration: 0.3, ease: 'back.out(3)' }); }
+  /** Safe step: the hatch flips over into a gold chip, then glowing paw prints appear. */
+  flipChip(r: number, i: number) {
+    const t = this.R(r)?.tiles[i]; if (!t) return; t.c.y = this.tileCY(r);
+    const tl = gsap.timeline();
+    tl.to(t.c.scale, { y: 0.05, x: 1.06, duration: this.d(0.11), ease: 'power2.in', onComplete: () => this.setState(r, i, 'safePicked') })
+      .to(t.c.scale, { y: 1, x: 1, duration: this.d(0.45), ease: 'elastic.out(1, 0.45)' });
+    this.track(tl);
+    const p = t.prints.clear(); const s = Math.max(0.7, t.h / 50);
+    for (const [x, y, k] of [[-t.w * 0.18, t.h * 0.12, 0], [t.w * 0.18, t.h * 0.06, 1]]) { p.ellipse(x, y, 4.5 * s, 3.2 * s).fill({ color: CYAN, alpha: 0.9 }); for (let d = -1; d <= 1; d++) p.circle(x + d * 3.2 * s, y - 4.2 * s - (d === 0 ? 0.8 : 0) * s, 1.4 * s).fill({ color: CYAN, alpha: 0.9 }); void k; }
+    p.alpha = 0; this.track(gsap.to(p, { alpha: 0.85, duration: 0.3, delay: this.d(0.35) }));
+    this.cleared = r + 1; this.hubieTile = i;
   }
-  private baseScale() { return (this.rowH * 1.1) / this.hubie.texture.height; }
-  private idle() {
-    const t = performance.now() / 1000;
-    if (this.level) { const r = this.R(this.cleared); if (r) for (let i = 0; i < r.tiles.length; i++) if (this.states[this.cleared]?.[i] === 'active') r.tiles[i].alpha = 0.78 + Math.sin(t * 4 + i) * 0.22; }
-    this.stars.alpha = 0.85 + Math.sin(t * 1.3) * 0.15;
-    if (this.world.y !== this.camY) this.parallax();
+  /** Trap: the hatch cracks, smoke rises from the hole. */
+  crack(r: number, i: number) {
+    const t = this.R(r)?.tiles[i]; if (!t) return; this.setState(r, i, 'trapPicked');
+    this.track(gsap.fromTo(t.c, { x: t.c.x - 4 }, { x: t.c.x, duration: 0.4, ease: 'elastic.out(1,0.25)' }));
+    const wx = t.c.x, wy = t.c.y; for (let k = 0; k < 14; k++) this.puff(wx + (Math.random() - 0.5) * t.w * 0.3, wy, 0x7d858c, 1.4);
+  }
+  private puff(x: number, y: number, col: number, size = 1, layer: Container = this.world) {
+    if (this.puffs.length > 80) return; const g = new Graphics(); g.circle(0, 0, 6 * size).fill({ color: col, alpha: 0.35 }); g.position.set(x, y); layer.addChild(g);
+    this.puffs.push({ g, vx: (Math.random() - 0.5) * 0.6, vy: -0.6 - Math.random() * 0.9, life: 0, max: 60 + Math.random() * 50 });
   }
 
-  // ---------- animations ----------
+  // ---------- Hubie ----------
+  private hubieScale() { return (this.rowH * 0.92) / 96; }
+  private placeHubie() {
+    const H = this.hubie; H.scale.set(this.hubieScale());
+    const r = this.cleared - 1; H.x = r < 0 ? this.idleX() : this.tileX(r, Math.max(0, this.hubieTile)); H.y = this.feetY(r);
+    this.drawShadow();
+  }
+  private drawShadow() { const s = this.hubieScale(); this.hubieShadow.clear().ellipse(0, 0, 17 * s, 4 * s).fill({ color: 0x000000, alpha: 0.45 }); }
+  /** Hubie walks in from the left edge to his start spot. */
+  walkIn(): Promise<void> {
+    const H = this.hubie; H.x = -40; H.y = this.feetY(-1); H.mode = 'walk'; H.scale.x = this.hubieScale();
+    return new Promise(res => this.track(gsap.to(H, { x: this.idleX(), duration: this.d(1.1), ease: 'none', onComplete: () => { H.mode = 'idle'; res(); } })));
+  }
+  /** At the bet Hubie strolls to the middle of the floor, under the first row. */
+  walkToStart(): Promise<void> {
+    const H = this.hubie; if (this.cleared > 0) return Promise.resolve(); H.mode = 'walk';
+    return new Promise(res => this.track(gsap.to(H, { x: this.cx, duration: this.d(0.45), ease: 'none', onComplete: () => { H.mode = 'idle'; res(); } })));
+  }
   /** Hubie hops onto tile i of row r. Resolves on landing. */
   hop(r: number, i: number): Promise<void> {
     return new Promise(res => {
-      const b = this.baseScale(), H = this.hubie; const x0 = H.x, y0 = H.y;
-      const x1 = this.tileX(r, i), y1 = this.rowY(r) - this.rowH * 0.52 + 2; const peak = this.rowH * 0.9;
-      const p = { t: 0 }; const tl = gsap.timeline({ onComplete: () => res() });
-      tl.to(H.scale, { x: b * 1.12, y: b * 0.84, duration: this.d(0.1), ease: 'power2.out' })
-        .to(p, { t: 1, duration: this.d(0.42), ease: 'none', onUpdate: () => { const t = p.t; H.x = x0 + (x1 - x0) * t; H.y = y0 + (y1 - y0) * easeInOut(t) - Math.sin(Math.PI * t) * peak; } }, '>')
-        .to(H.scale, { x: b * 0.92, y: b * 1.1, duration: this.d(0.18), ease: 'power1.out' }, '<')
-        .to(H.scale, { x: b * 1.18, y: b * 0.8, duration: this.d(0.08), ease: 'power2.out' }, '>')
-        .to(H.scale, { x: b, y: b, duration: this.d(0.35), ease: 'elastic.out(1, 0.45)' }, '>');
+      const b = this.hubieScale(), H = this.hubie; gsap.killTweensOf(H); H.mode = 'air'; const x0 = H.x, y0 = H.y;
+      const x1 = this.tileX(r, i), y1 = this.feetY(r); const peak = this.rowH * 0.75;
+      const p = { t: 0 }; const tl = gsap.timeline({ onComplete: () => { H.mode = 'idle'; res(); } });
+      tl.to(H.scale, { x: b * 1.15, y: b * 0.8, duration: this.d(0.11), ease: 'power2.out' })
+        .to([H.armL], { rotation: 2.7, duration: this.d(0.15) }, '<').to([H.armR], { rotation: -2.7, duration: this.d(0.15) }, '<')
+        .to(p, { t: 1, duration: this.d(0.42), ease: 'none', onUpdate: () => { const t = p.t; H.x = x0 + (x1 - x0) * t; H.y = y0 + (y1 - y0) * t - Math.sin(Math.PI * t) * peak; } }, '>')
+        .to(H.scale, { x: b * 0.9, y: b * 1.12, duration: this.d(0.18), ease: 'power1.out' }, '<')
+        .to(H.legL, { rotation: 0.5, duration: this.d(0.2) }, '<').to(H.legR, { rotation: -0.5, duration: this.d(0.2) }, '<')
+        .to(H.scale, { x: b * 1.2, y: b * 0.78, duration: this.d(0.08), ease: 'power2.out' }, '>')
+        .to([H.legL, H.legR], { rotation: 0, duration: this.d(0.1) }, '<')
+        .to(H.armL, { rotation: 0.28, duration: this.d(0.3) }, '<').to(H.armR, { rotation: -0.28, duration: this.d(0.3) }, '<')
+        .to(H.scale, { x: b, y: b, duration: this.d(0.35), ease: 'elastic.out(1, 0.45)' }, '<');
       this.track(tl);
     });
   }
-  panTo(cleared: number) { this.camY = this.camFor(cleared); this.track(gsap.to(this.world, { y: this.camY, duration: this.d(0.6), ease: 'power2.inOut', onUpdate: () => this.parallax() })); }
-  /** Row lights flicker on after a safe step. */
-  lightRow(r: number) {
-    const L = this.R(r)?.lights; if (!L) return; const tl = gsap.timeline();
-    tl.to(L, { alpha: 1, duration: 0.05 }).to(L, { alpha: 0.2, duration: 0.05 }).to(L, { alpha: 1, duration: 0.05 }).to(L, { alpha: 0.4, duration: 0.06 }).to(L, { alpha: 1, duration: 0.12 });
-    this.track(tl);
+  panTo(cleared: number) { this.camY = this.camFor(cleared); this.track(gsap.to(this.world, { y: this.camY, duration: this.d(0.6), ease: 'power2.inOut' })); }
+  lightRow(_r: number) { /* footprints are drawn by flipChip */ }
+  setMultTag(text: string | null) {
+    if (!text) { this.tag.visible = false; return; }
+    this.tagTxt.text = text; const w = this.tagTxt.width + 14, h = 18;
+    this.tagBg.clear().roundRect(-w / 2, -h / 2, w, h, 9).fill({ color: 0x06090c, alpha: 0.85 }).roundRect(-w / 2, -h / 2, w, h, 9).stroke({ width: 1, color: CYAN, alpha: 0.6 });
+    this.tag.visible = true; this.track(gsap.fromTo(this.tag.scale, { x: 1.3, y: 1.3 }, { x: 1, y: 1, duration: 0.35, ease: 'back.out(2)' }));
   }
-  /** Trap: Hubie makes a face, then tumbles off the roof. */
+  /** Trap: Hubie flails and drops through the cracked hatch. */
   tumble(): Promise<void> {
     return new Promise(res => {
-      const H = this.hubie; H.texture = this.tex.hubie_react; const b = this.baseScale(); H.scale.set(b);
+      const H = this.hubie; H.mode = 'fall'; this.tag.visible = false;
       const tl = gsap.timeline({ onComplete: () => res() });
-      tl.to(H, { y: H.y - this.rowH * 0.5, duration: this.d(0.25), ease: 'power2.out' })
-        .to(H, { rotation: (Math.random() < 0.5 ? -1 : 1) * Math.PI * 1.6, y: H.y + this.rowH * 2.2, alpha: 0, duration: this.d(0.75), ease: 'power2.in' }, '>0.25');
+      tl.to(H, { y: H.y - this.rowH * 0.45, duration: this.d(0.28), ease: 'power2.out' })
+        .to(H, { rotation: (Math.random() < 0.5 ? -1 : 1) * 0.6, duration: this.d(0.2) }, '<')
+        .to(H.hat, { y: -120, rotation: 1.2, duration: this.d(0.5), ease: 'power1.out' }, '<')
+        .to(H, { y: H.y + this.rowH * 1.6, duration: this.d(0.7), ease: 'power2.in' }, '>0.15')
+        .to(H.scale, { x: this.hubieScale() * 0.6, y: this.hubieScale() * 0.6, duration: this.d(0.7) }, '<')
+        .to(H, { alpha: 0, duration: this.d(0.3) }, '>-0.3');
       this.track(tl);
     });
   }
-  celebrate() { const H = this.hubie; H.texture = this.tex.hubie_bigwin; const b = this.baseScale(); this.track(gsap.fromTo(H.scale, { x: b * 0.8, y: b * 1.2 }, { x: b, y: b, duration: 0.6, ease: 'elastic.out(1, 0.4)' })); }
-  /** Screen position of Hubie's head, for coin sparkles. */
-  hubieScreen() { const r = this.app.canvas.getBoundingClientRect(); return { x: r.left + this.hubie.x, y: r.top + this.world.y + this.hubie.y - this.hubie.height * 0.6 }; }
+  /** Win: tier 0 small hop, 1 hat tip, 2 spotlight, 3 city lights up, 4 fireworks too. */
+  celebrate(tier = 0) {
+    const H = this.hubie, b = this.hubieScale(); H.mode = 'win'; gsap.killTweensOf([H.hat, H.armR, H.armL]);
+    const tl = gsap.timeline({ onComplete: () => { H.mode = 'idle'; } });
+    tl.to(H, { y: H.y - this.rowH * 0.3, duration: 0.18, yoyo: true, repeat: 1, ease: 'power2.out' })
+      .to(H.armR, { rotation: -2.9, duration: 0.25 }, '<')
+      .to(H.hat, { y: -84, x: 8, rotation: 0.35, duration: 0.25, ease: 'back.out(2)' }, '<0.1')
+      .to(H.hat, { y: -70, x: 1, rotation: -0.1, duration: 0.3, delay: 0.5 })
+      .to(H.armR, { rotation: -0.28, duration: 0.3 }, '<');
+    if (tier >= 1) tl.to(H.scale, { x: b * 1.12, y: b * 0.9, duration: 0.12, yoyo: true, repeat: 3 }, 0.2);
+    if (tier >= 2) tl.to(H.armL, { rotation: 2.9, duration: 0.25, yoyo: true, repeat: 3 }, 0.2);
+    this.track(tl);
+    if (tier >= 2) this.spotlight(tier >= 3 ? 6 : 3);
+    if (tier >= 3) { this.cityBoost = 1; this.track(gsap.to(this, { cityBoost: 0, duration: 7, ease: 'power1.in' })); }
+    if (tier >= 4) for (let k = 0; k < 8; k++) this.track(gsap.delayedCall(k * 0.45, () => this.firework()));
+  }
+  private spotlight(sec: number) {
+    const g = this.beam; g.alpha = 0; const draw = (a: number) => { const x0 = this.w * 0.85, y0 = this.h + 20; const tx = this.cx + Math.sin(a) * this.w * 0.4; g.clear().poly([x0 - 8, y0, x0 + 8, y0, tx + 70, -20, tx - 70, -20]).fill({ color: 0xfff2c4, alpha: 0.07 }); };
+    const o = { a: -1 }; this.track(gsap.timeline().to(g, { alpha: 1, duration: 0.3 }).to(o, { a: 1, duration: sec / 2, yoyo: true, repeat: 1, ease: 'sine.inOut', onUpdate: () => draw(o.a) }, '<').to(g, { alpha: 0, duration: 0.4 }));
+  }
+  private firework() {
+    const x = this.w * (0.2 + Math.random() * 0.6), y = this.h * (0.1 + Math.random() * 0.25); const col = Math.random() < 0.6 ? GOLD : CYAN;
+    for (let k = 0; k < 22; k++) { const a = (k / 22) * Math.PI * 2; const g = new Graphics(); g.circle(0, 0, 2).fill(col); g.position.set(x, y); this.fireworks.addChild(g);
+      this.track(gsap.to(g, { x: x + Math.cos(a) * 70, y: y + Math.sin(a) * 70 + 20, alpha: 0, duration: 1.2, ease: 'power2.out', onComplete: () => g.destroy() })); }
+  }
+  hubieScreen() { const r = this.app.canvas.getBoundingClientRect(); return { x: r.left + this.hubie.x, y: r.top + this.world.y + this.hubie.y - this.rowH * 0.5 }; }
   tileScreen(r: number, i: number) { const c = this.app.canvas.getBoundingClientRect(); const t = this.tileRect(r, i); return { x: c.left + t.x + t.w / 2, y: c.top + t.y + t.h / 2 }; }
   reset(lv: Level) { this.setLevel(lv); }
   /** Reveal the whole layout at the end of a round, sweeping upward from row `from`. */
@@ -213,9 +406,41 @@ export class Scene {
       if (delay === 0) this.setState(r, i, ns); else this.track(gsap.delayedCall(delay, () => this.setState(r, i, ns)));
     }));
   }
+
+  // ---------- per frame ----------
+  private frame(dt: number) {
+    const now = performance.now() / 1000; const { w, h } = this;
+    this.hubie?.tick(now);
+    if (this.hubie) {
+      const H = this.hubie; this.hubieShadow.position.set(H.x, this.cleared === 0 && H.mode !== 'air' ? this.feetY(-1) : H.mode === 'air' ? H.y + 999 : this.feetY(this.cleared - 1));
+      this.hubieShadow.visible = H.mode !== 'air' && H.mode !== 'fall';
+      this.tag.position.set(H.x, H.y + 14);
+      this.onFrame(H.x, this.world.y + H.y - this.rowH * 0.95);
+    }
+    this.parallax();
+    // neon flicker and city glow
+    const fl = Math.random() < 0.015 ? 0.35 : 1; this.neon.alpha = (0.75 + Math.sin(now * 3) * 0.05) * fl + this.cityBoost * 0.25;
+    this.neonGlow.alpha = 0.1 * fl + this.cityBoost * 0.25; this.farWin.alpha = 1 + this.cityBoost * (1.5 + Math.sin(now * 12) * 0.5);
+    this.cloths.forEach((c, k) => { c.rotation = Math.sin(now * 1.4 + k) * 0.08; });
+    // rain
+    const g = this.rain.clear(); const wind = 2.2;
+    for (const d of this.drops) { d.y += d.v * dt; d.x -= wind * dt * 0.5; if (d.y > h) { if (Math.random() < 0.06) this.ripples.push({ x: this.puddleAt.x + (Math.random() - 0.5) * this.puddleAt.rw * 1.4, y: this.puddleAt.y, t: 0 }); d.y = -d.l; d.x = Math.random() * (w + 60); } g.moveTo(d.x, d.y).lineTo(d.x + wind, d.y + d.l); }
+    g.stroke({ width: 1, color: 0xa9bccb, alpha: 0.22 });
+    for (let k = this.ripples.length - 1; k >= 0; k--) { const r = this.ripples[k]; r.t += dt / 40; if (r.t > 1) { this.ripples.splice(k, 1); continue; } g.ellipse(r.x, r.y + this.world.y, 3 + r.t * 10, 1 + r.t * 2.5).stroke({ width: 1, color: 0xa9bccb, alpha: 0.4 * (1 - r.t) }); }
+    // steam from foreground vents
+    if (this.vents.length && Math.random() < 0.12) { const v = this.vents[Math.random() < 0.5 ? 0 : 1]; this.puff(v[0] + (Math.random() - 0.5) * 8, v[1], 0x9aa6af, 1.2, this.steam); }
+    for (let k = this.puffs.length - 1; k >= 0; k--) { const p = this.puffs[k]; p.life += dt; p.g.x += p.vx * dt; p.g.y += p.vy * dt; p.g.scale.set(1 + p.life / 30); p.g.alpha = Math.max(0, 1 - p.life / p.max); if (p.life > p.max) { p.g.destroy(); this.puffs.splice(k, 1); } }
+    // active row breathes
+    if (this.level) { const row = this.R(this.cleared); if (row) row.tiles.forEach((t, i) => { if (this.states[this.cleared]?.[i] === 'active') t.g.alpha = 0.9 + Math.sin(now * 4 + i) * 0.1; else t.g.alpha = 1; }); }
+  }
   get camSettled() { return Math.abs(this.world.y - this.camY) < 0.5; }
+  /** Renders a standalone Hubie to a data URL, used for the header badge, intro and celebrations. */
+  async portrait(pose: 'idle' | 'win' = 'idle') {
+    const hb = new Hubie(); if (pose === 'win') { hb.armR.rotation = -2.9; hb.armL.rotation = 2.6; hb.hat.position.set(8, -86); hb.hat.rotation = 0.35; }
+    hb.scale.set(3); hb.position.set(80, 300); const c = new Container(); c.addChild(hb);
+    const url = await this.app.renderer.extract.base64({ target: c, resolution: 1 }); c.destroy({ children: true }); return url;
+  }
 }
 
-const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
-function lerpColor(a: number, b: number, t: number) { const r = ((a >> 16) & 255) + ((((b >> 16) & 255) - ((a >> 16) & 255)) * t), g = ((a >> 8) & 255) + ((((b >> 8) & 255) - ((a >> 8) & 255)) * t), bl = (a & 255) + (((b & 255) - (a & 255)) * t); return (Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(bl); }
+function mix(a: number, b: number, t: number) { const f = (s: number) => Math.round(((a >> s) & 255) + (((b >> s) & 255) - ((a >> s) & 255)) * t); return (f(16) << 16) | (f(8) << 8) | f(0); }
 export const fmtMult = (m: number) => (m >= 10000 ? '10,000' : m.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) + 'x';
