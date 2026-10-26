@@ -14,6 +14,9 @@ export class Engine {
   // scheduler state
   step = 0; next = 0; bar = 0; bpm = 100; intensity = 0; target = 0; playing = false;
   private seed = 7;
+  /** When set, stingers start at this time instead of now (used by the offline render). */
+  at: number | null = null;
+  private now() { return this.at ?? this.c.currentTime; }
   constructor(c: Ctx, dest: AudioNode, live: boolean) {
     this.c = c; this.cap = live ? (MOBILE ? 36 : 56) : 10_000;
     const comp = c.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4; comp.attack.value = 0.004; comp.release.value = 0.2;
@@ -69,14 +72,14 @@ export class Engine {
 
   /** Book every 16th note up to time `until`. */
   scheduleUntil(until: number) {
-    while (this.next < until) { this.tick(this.next, this.step); const spb = 60 / this.bpm; this.next += spb / 4; this.step = (this.step + 1) % 16; if (this.step === 0) this.newBar(); }
+    while (this.next < until) { this.tick(this.next, this.step); const spb = 60 / this.bpm; this.next += spb / 4; this.step = (this.step + 1) % 16; if (this.step === 0) this.newBar(this.next); }
   }
-  private newBar() {
+  private newBar(t: number) {
     this.bar++;
     // intensity eases toward the target one level per bar, so layers join on the bar line
     if (this.intensity < this.target) this.intensity++; else if (this.intensity > this.target) this.intensity--;
     this.bpm = 98 + this.intensity * 3.5;
-    const c = this.c; this.tone.frequency.setTargetAtTime(this.intensity >= 4 ? 12000 : 5200 + this.intensity * 1500, c.currentTime, 0.4);
+    this.tone.frequency.setTargetAtTime(this.intensity >= 4 ? 12000 : 5200 + this.intensity * 1500, t, 0.4);
   }
   private tick(t: number, s: number) {
     const I = this.intensity, sec = Math.floor(this.bar / 8) % 2, chordSet = sec ? Engine.B : Engine.A, ch = chordSet[Math.floor(this.bar / 2) % 4];
@@ -106,15 +109,14 @@ export class Engine {
   }
 
   // ---------- sound effects and stingers ----------
-  sfxPick() { const t = this.c.currentTime; this.osc(880, 'triangle', t, 0.05, 0.12, this.sfx); }
-  sfxSafe(row: number) { const t = this.c.currentTime; const base = 62 + (row % 12); [0, 4, 7].forEach((d, i) => this.osc(N(base + d + 12), 'triangle', t + i * 0.045, 0.22, 0.12, this.sfx)); this.osc(N(base + 24), 'sine', t + 0.14, 0.4, 0.05, this.sfx); }
-  sfxHop() { const t = this.c.currentTime; this.osc(300, 'sine', t, 0.18, 0.12, this.sfx, { glide: 720 }); }
-  sfxLand() { const t = this.c.currentTime; this.osc(110, 'sine', t, 0.12, 0.3, this.sfx, { glide: 60 }); this.hiss(t, 0.06, 0.08, 1200, 1, 'bandpass', this.sfx); }
-  sfxBet() { const t = this.c.currentTime; this.osc(523, 'square', t, 0.06, 0.05, this.sfx, { cut: 2000 }); this.osc(784, 'square', t + 0.05, 0.08, 0.05, this.sfx, { cut: 2000 }); }
-  sfxClick() { this.osc(1200, 'sine', this.c.currentTime, 0.03, 0.05, this.sfx); }
+  sfxPick() { const t = this.now(); this.osc(880, 'triangle', t, 0.05, 0.12, this.sfx); }
+  sfxSafe(row: number) { const t = this.now(); const base = 62 + (row % 12); [0, 4, 7].forEach((d, i) => this.osc(N(base + d + 12), 'triangle', t + i * 0.045, 0.22, 0.12, this.sfx)); this.osc(N(base + 24), 'sine', t + 0.14, 0.4, 0.05, this.sfx); }
+  sfxHop() { const t = this.now(); this.osc(300, 'sine', t, 0.18, 0.12, this.sfx, { glide: 720 }); }
+  sfxLand() { const t = this.now(); this.osc(110, 'sine', t, 0.12, 0.3, this.sfx, { glide: 60 }); this.hiss(t, 0.06, 0.08, 1200, 1, 'bandpass', this.sfx); }
+  sfxBet() { const t = this.now(); this.osc(523, 'square', t, 0.06, 0.05, this.sfx, { cut: 2000 }); this.osc(784, 'square', t + 0.05, 0.08, 0.05, this.sfx, { cut: 2000 }); }
+  sfxClick() { this.osc(1200, 'sine', this.now(), 0.03, 0.05, this.sfx); }
   /** Trap: the vent pops, a falling detuned slide, then a low thud. */
-  stingTrap() {
-    const t = this.c.currentTime;
+  stingTrap() { const t = this.now();
     this.hiss(t, 0.5, 0.35, 900, 0.6, 'bandpass', this.sfx, 180);
     this.osc(N(62), 'sawtooth', t + 0.05, 0.7, 0.1, this.sfx, { glide: N(38), cut: 1200 });
     this.osc(N(61), 'sawtooth', t + 0.05, 0.7, 0.08, this.sfx, { glide: N(37), cut: 1200, det: 18 });
@@ -122,8 +124,7 @@ export class Engine {
     this.osc(70, 'sine', t + 0.9, 0.4, 0.4, this.sfx, { glide: 40 });
   }
   /** Cash out: rising D major arpeggio with a bell on top. tier 0 to 4 adds length and weight. */
-  stingCash(tier = 0) {
-    const t = this.c.currentTime; const seq = [62, 66, 69, 74, 78, 81, 86, 90].slice(0, 4 + tier);
+  stingCash(tier = 0) { const t = this.now(); const seq = [62, 66, 69, 74, 78, 81, 86, 90].slice(0, 4 + tier);
     seq.forEach((m, i) => { this.osc(N(m), 'square', t + i * 0.07, 0.25, 0.05, this.sfx, { cut: 3000 }); this.osc(N(m + 12), 'sine', t + i * 0.07, 0.4, 0.04, this.sfx); });
     const end = t + seq.length * 0.07;
     [74, 78, 81].forEach(m => this.osc(N(m), 'triangle', end, 0.9 + tier * 0.3, 0.06, this.sfx, { att: 0.02, rel: 0.6 }));
@@ -169,7 +170,9 @@ export async function renderOffline(seconds = 48, sampleRate = 44100) {
   const oc = new OfflineAudioContext(2, Math.ceil(seconds * sampleRate), sampleRate);
   const e = new Engine(oc, oc.destination, false); e.next = 0.05;
   // Ramp intensity 0..4 across the render; schedule bar by bar so newBar sees the right target.
-  const per = seconds / 5;
-  for (let t = 0; t < seconds - 2; t += 0.5) { e.target = Math.min(4, Math.floor(t / per)); e.scheduleUntil(t + 0.5); }
+  const per = (seconds - 10) / 5;
+  for (let t = 0; t < seconds - 10; t += 0.5) { e.target = Math.min(4, Math.floor(t / per)); e.scheduleUntil(t + 0.5); }
+  // Stingers after the groove: trap at seconds-8, cash out tiers spaced out.
+  e.at = seconds - 9; e.stingTrap(); e.at = seconds - 7; e.stingCash(0); e.at = seconds - 5; e.stingCash(2); e.at = seconds - 2.8; e.stingCash(4); e.at = null;
   return oc.startRendering();
 }
