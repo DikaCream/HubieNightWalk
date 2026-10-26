@@ -109,8 +109,8 @@ export class Scene {
       const beam = new Graphics(); beam.rect(36, y + 2, this.w - this.padR - 40, 5).fill(0x14323d).rect(36, y + 7, this.w - this.padR - 40, 2).fill({ color: 0x000000, alpha: 0.4 });
       for (let x = 60; x < this.w - this.padR - 10; x += 70) beam.rect(x, y + 9, 4, this.rowH - 12).fill({ color: 0x0f2832, alpha: 0.9 });
       const lights = new Graphics(); for (let x = 44; x < this.w - this.padR - 8; x += 16) lights.circle(x, y + 4.5, 1.8).fill(isSummit(lv, r) ? GOLD : CYAN); lights.alpha = 0.12;
-      const label = new Text({ text: fmtMult(multAt(lv, r + 1)), style: { fontFamily: 'system-ui, sans-serif', fontWeight: '800', fontSize: Math.round(this.rowH * 0.17), fill: isSummit(lv, r) ? GOLD : 0x7fdfe4 } });
-      label.anchor.set(0, 1); label.position.set(6, y - 4); label.alpha = 0.75;
+      const label = new Text({ text: fmtMult(multAt(lv, r + 1)), style: { fontFamily: 'system-ui, sans-serif', fontWeight: '800', fontSize: Math.max(11, Math.round(this.rowH * 0.15)), fill: isSummit(lv, r) ? GOLD : 0x7fdfe4 } });
+      label.anchor.set(0, 0); label.position.set(8, y + 11); label.alpha = 0.8;
       c.addChild(beam, lights, label);
       const tiles: Graphics[] = [];
       for (let i = 0; i < tilesOn(lv, r); i++) { const g = new Graphics(); c.addChild(g); tiles.push(g); }
@@ -156,11 +156,11 @@ export class Scene {
     if (r !== null && r < this.level.rows) this.states[r].forEach((s, i) => { if (s === 'idle') this.setState(r, i, 'active'); });
   }
   private placeHubie() {
-    this.hubie.height = this.rowH * 1.25; this.hubie.scale.x = this.hubie.scale.y;
+    this.hubie.height = this.rowH * 1.1; this.hubie.scale.x = this.hubie.scale.y;
     const r = this.cleared - 1; this.hubie.x = r < 0 ? 52 + (this.w - this.padR - 52) / 2 : this.tileX(r, Math.max(0, this.hubieTile));
     this.hubie.y = this.rowY(r) - (r < 0 ? 0 : this.rowH * 0.52) + 2;
   }
-  private baseScale() { return (this.rowH * 1.25) / this.hubie.texture.height; }
+  private baseScale() { return (this.rowH * 1.1) / this.hubie.texture.height; }
   private idle() {
     const t = performance.now() / 1000;
     if (this.level) { const r = this.R(this.cleared); if (r) for (let i = 0; i < r.tiles.length; i++) if (this.states[this.cleared]?.[i] === 'active') r.tiles[i].alpha = 0.78 + Math.sin(t * 4 + i) * 0.22; }
