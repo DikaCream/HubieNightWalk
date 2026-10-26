@@ -10,7 +10,7 @@ function sprite(w: number, h: number, draw: (x: CanvasRenderingContext2D) => voi
 const COIN = sprite(64, 64, x => { x.fillStyle = '#b86e00'; x.beginPath(); x.arc(32, 32, 31, 0, 7); x.fill(); x.fillStyle = '#ffd23f'; x.beginPath(); x.arc(32, 30, 25, 0, 7); x.fill(); x.fillStyle = '#fff6c2'; x.fillRect(24, 16, 6, 16); });
 const COIN_DARK = sprite(64, 64, x => { x.fillStyle = '#b86e00'; x.beginPath(); x.arc(32, 32, 31, 0, 7); x.fill(); x.fillStyle = '#f2a516'; x.beginPath(); x.arc(32, 30, 25, 0, 7); x.fill(); });
 const BILL = sprite(64, 32, x => { x.fillStyle = '#5fb36a'; x.fillRect(0, 0, 64, 32); x.fillStyle = '#2f7a3a'; x.beginPath(); x.arc(32, 16, 10, 0, 7); x.fill(); });
-const SPARKS = Array.from({ length: 8 }, (_, i) => sprite(32, 8, x => { x.fillStyle = `hsl(${30 + i * 22},100%,65%)`; x.fillRect(0, 0, 32, 8); }));
+const SPARKS = Array.from({ length: 8 }, (_, i) => sprite(32, 8, x => { x.fillStyle = `hsl(${34 + i * 4},100%,${60 + i * 3}%)`; x.fillRect(0, 0, 32, 8); }));
 const DOT = sprite(16, 16, x => { x.fillStyle = '#7ff3ef'; x.beginPath(); x.arc(8, 8, 8, 0, 7); x.fill(); });
 const SMOKE = sprite(64, 64, x => { const g = x.createRadialGradient(32, 32, 2, 32, 32, 32); g.addColorStop(0, 'rgba(200,215,220,0.55)'); g.addColorStop(1, 'rgba(200,215,220,0)'); x.fillStyle = g; x.fillRect(0, 0, 64, 64); });
 const EMBER = sprite(16, 16, x => { x.fillStyle = '#ff8a1f'; x.beginPath(); x.arc(8, 8, 8, 0, 7); x.fill(); });

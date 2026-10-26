@@ -3,7 +3,7 @@ const [w, h, name, q = ''] = [+process.argv[2], +process.argv[3], process.argv[4
 const mobile = w < 600;
 const b = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required'] });
 const p = await b.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: mobile ? 2 : 1, isMobile: mobile, hasTouch: mobile });
-const errs = []; p.on('pageerror', e => errs.push(e.message)); p.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') errs.push(m.type() + ' ' + m.text()); });
+const errs = []; p.on('pageerror', e => errs.push(e.message)); p.on('console', async m => { if (m.type() === 'error' || m.type() === 'warning') errs.push(m.type() + ' ' + m.text() + ' ' + JSON.stringify(await Promise.all(m.args().map(a => a.jsonValue().catch(() => '?'))))); });
 await p.goto('http://127.0.0.1:4190/' + q); await p.waitForTimeout(1500);
 await p.screenshot({ path: `/tmp/${name}-intro.png` });
 await p.click('.cta', { force: true }); await p.click('.cta', { force: true }); await p.waitForTimeout(500);

@@ -52,7 +52,7 @@ export default function App() {
   useEffect(() => {
     const sc = new Scene(stageRef.current!); scene.current = sc; sc.fast = game.fast;
     sc.onLayout = () => updateRects();
-    sc.onFrame = (x, y) => { const el = winRef.current; if (el) el.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px) translate(-50%, -100%)`; };
+    sc.onFrame = (x, y) => { const el = winRef.current; if (el) el.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px) translate(-50%, 0)`; };
     void sc.ready.then(async () => { sc.setLevel(LEVELS[game.level]); void sc.walkIn(); setArt({ idle: await sc.portrait('idle'), win: await sc.portrait('win') }); });
     fx.current = new FX(fxRef.current!);
     const off = liveSource.subscribe(e => setFeed(f => [e, ...f].slice(0, 40)));

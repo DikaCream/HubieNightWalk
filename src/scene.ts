@@ -35,11 +35,11 @@ export class Scene {
   ready: Promise<void>;
   private host: HTMLElement;
   private sky = new Graphics(); private far = new Container(); private farG = new Graphics(); private farWin = new Graphics();
-  private near = new Graphics(); private mid = new Container(); private lines = new Graphics(); private cloths: Graphics[] = [];
+  private near = new Graphics(); private mid = new Container(); private lines = new Graphics(); private clothLayer = new Container(); private cloths: Graphics[] = [];
   private billboard = new Container(); private neon!: Text; private neonGlow!: Sprite; private puddle = new Graphics();
   private world = new Container(); private rowsLayer = new Container(); private wall = new Graphics();
   private rain = new Graphics(); private fg = new Graphics(); private steam = new Container(); private vignette!: Sprite;
-  private beam = new Graphics(); private fireworks = new Container();
+  private beam = new Graphics(); private moon!: Sprite; private fireworks = new Container();
   private glow!: Texture; private drops: Drop[] = []; private puffs: Puff[] = []; private ripples: { x: number; y: number; t: number }[] = [];
   hubie!: Hubie; private hubieShadow = new Graphics(); private tag = new Container(); private tagBg = new Graphics(); private tagTxt!: Text;
   private rows: Row[] = [];
@@ -63,7 +63,8 @@ export class Scene {
     this.tagTxt = new Text({ text: '', style: { fontFamily: FONT, fontWeight: '900', fontSize: 12, fill: 0xeafcff } }); this.tagTxt.anchor.set(0.5);
     this.tag.addChild(this.tagBg, this.tagTxt); this.tag.visible = false;
     this.world.addChild(this.wall, this.rowsLayer, this.hubieShadow, this.hubie, this.tag);
-    this.app.stage.addChild(this.sky, this.fireworks, this.far, this.near, this.mid, this.lines, this.beam, this.world, this.steam, this.fg, this.rain, this.vignette);
+    this.moon = new Sprite(this.glow); this.moon.anchor.set(0.5); this.moon.tint = 0xbfcad3; this.moon.alpha = 0.22;
+    this.app.stage.addChild(this.sky, this.moon, this.fireworks, this.far, this.near, this.mid, this.lines, this.clothLayer, this.beam, this.world, this.steam, this.fg, this.rain, this.vignette);
     this.app.renderer.on('resize', () => this.layout());
     this.app.ticker.maxFPS = 60;
     this.app.ticker.add(t => this.frame(t.deltaTime));
@@ -78,21 +79,22 @@ export class Scene {
 
   // ---------- geometry ----------
   private rowY(r: number) { return -r * this.rowH; } // baseline (front edge) of roof tier r; tier -1 is the rooftop floor
-  private tileW(n: number) { return n === 1 ? Math.min(this.pw * 0.8, 300) : Math.min(112, (this.pw - (n - 1) * 9) / n); }
+  private tileW(n: number) { return n === 1 ? Math.min(this.pw * 0.8, 320) : Math.min(this.w > 900 ? 128 : n === 3 ? 100 : 112, (this.pw - (n - 1) * 9) / n); }
   private tileH(n: number) { return Math.min(this.rowH * 0.56, this.tileW(n === 1 ? 3 : n) * 0.66); }
   tileX(r: number, i: number) { const n = tilesOn(this.level, r); const tw = this.tileW(n); return this.cx + (i - (n - 1) / 2) * (tw + 9); }
   private tileCY(r: number) { return this.rowY(r) - this.tileH(tilesOn(this.level, r)) / 2 - 6; }
-  private feetY(r: number) { return r < 0 ? this.rowY(-1) - this.rowH * 0.35 : this.tileCY(r) + this.tileH(tilesOn(this.level, r)) * 0.12; }
-  private camFor(cleared: number) { return this.h * 0.7 - this.feetY(cleared - 1); }
+  private feetY(r: number) { return r < 0 ? this.rowY(-1) - this.rowH * 0.1 : this.tileCY(r) + this.tileH(tilesOn(this.level, r)) * 0.12; }
+  private camFor(cleared: number) { return this.h * (cleared === 0 ? 0.8 : 0.72) - this.feetY(cleared - 1); }
   private idleX() { return this.cx - Math.min(this.pw * 0.32, 110); }
   /** Screen rectangle of a tile (CSS pixels relative to the canvas). */
   tileRect(r: number, i: number) { const n = tilesOn(this.level, r); const tw = this.tileW(n), th = this.tileH(n); return { x: this.tileX(r, i) - tw / 2, y: this.camY + this.tileCY(r) - th / 2, w: tw, h: th }; }
 
   layout() {
     this.w = this.app.screen.width; this.h = this.app.screen.height;
-    this.rowH = Math.max(70, Math.min(104, this.h / 5));
-    this.pw = Math.min(this.w - 20, 470); this.cx = this.w / 2;
+    this.rowH = Math.max(70, Math.min(112, this.h / 5));
+    this.pw = Math.min(this.w - 20, this.w > 900 ? 560 : 470); this.cx = this.w / 2;
     this.drawSky(); this.drawCity(); this.drawMid(); this.drawFg();
+    this.moon.position.set(this.w * 0.24, this.h * 0.12); this.moon.width = this.moon.height = Math.min(this.w, this.h) * 0.35;
     this.vignette.width = this.w; this.vignette.height = this.h;
     if (this.level) { this.buildRows(); this.placeHubie(); }
     this.world.y = this.camY = this.camFor(this.cleared);
@@ -105,7 +107,6 @@ export class Scene {
     const { w, h } = this; const g = this.sky.clear(); const N = 24;
     for (let i = 0; i < N; i++) { const t = i / N; g.rect(0, (h * 1.4 * i) / N - h * 0.2, w, (h * 1.4) / N + 1).fill(mix(0x0b0f14, 0x232a31, t * t)); }
     g.ellipse(w * 0.5, h * 0.62, w * 0.9, h * 0.22).fill({ color: 0x3a3127, alpha: 0.25 });
-    g.circle(w * 0.2, h * 0.12, 18).fill({ color: 0xc9d4dc, alpha: 0.12 }).circle(w * 0.2, h * 0.12, 40).fill({ color: 0xc9d4dc, alpha: 0.04 });
     const r = seeded(31);
     for (let i = 0; i < 9; i++) g.ellipse(r() * w, h * (0.05 + r() * 0.35), 60 + r() * 120, 10 + r() * 14).fill({ color: 0x2c343c, alpha: 0.25 });
   }
@@ -129,10 +130,10 @@ export class Scene {
     }
   }
   private drawMid() {
-    const { w, h } = this; this.mid.removeChildren().forEach(c => c.destroy({ children: true }));
+    const { w, h } = this; this.mid.removeChildren().forEach(c => { if (c !== this.billboard) c.destroy({ children: true }); });
     const SIL = 0x161c22, EDGE = 0x36414b;
     // water tower on the left
-    const wt = new Graphics(); const tx = Math.max(46, w * 0.12), tb = h * 0.6, tw = Math.min(70, w * 0.16), th = tw * 0.9;
+    const wt = new Graphics(); const tx = Math.max(46, w * 0.12), tb = h * 0.6, tw = Math.min(h * 0.13, w * 0.16, 120), th = tw * 0.9;
     for (const lx of [-0.42, -0.14, 0.14, 0.42]) wt.moveTo(tx + lx * tw, tb - th * 0.05).lineTo(tx + lx * tw * 1.25, tb + h * 0.2).stroke({ width: 3, color: SIL });
     wt.moveTo(tx - tw * 0.5, tb + h * 0.08).lineTo(tx + tw * 0.5, tb + h * 0.13).moveTo(tx + tw * 0.5, tb + h * 0.08).lineTo(tx - tw * 0.5, tb + h * 0.13).stroke({ width: 1.5, color: SIL });
     wt.rect(tx - tw / 2, tb - th, tw, th).fill(SIL);
@@ -142,7 +143,7 @@ export class Scene {
     wt.circle(tx, tb - th - tw * 0.42, 2.5).fill({ color: 0xd04a35, alpha: 0.8 });
     this.mid.addChild(wt);
     // billboard on the right, Housebets neon
-    const bb = this.billboard; bb.removeChildren(); const bw = Math.min(190, w * 0.44), bh = bw * 0.36, bx = w - bw / 2 - Math.max(10, w * 0.05), by = h * 0.2;
+    const bb = this.billboard; bb.removeChildren().forEach(c => { if (c !== this.neon && c !== this.neonGlow) c.destroy(); }); const bw = Math.min(190, w * 0.44), bh = bw * 0.36, bx = w - bw / 2 - Math.max(10, w * 0.05), by = h * 0.2;
     const frame = new Graphics();
     for (const sx of [-0.3, 0.3]) frame.rect(bx + sx * bw - 2, by + bh / 2, 4, h * 0.5).fill(SIL);
     frame.moveTo(bx - bw * 0.3, by + bh / 2 + 20).lineTo(bx + bw * 0.3, by + bh / 2 + 60).stroke({ width: 1.5, color: SIL });
@@ -165,7 +166,7 @@ export class Scene {
         const t = k / 4 + (r() - 0.5) * 0.08; const px = (1 - t) ** 2 * x0 + 2 * (1 - t) * t * ((x0 + x1) / 2) + t * t * x1, py = (1 - t) ** 2 * y0 + 2 * (1 - t) * t * ((y0 + y1) / 2 + sag * 2) + t * t * y1;
         const c = new Graphics(); const cw = 10 + r() * 10, chh = 12 + r() * 12; const col = [0x3d3640, 0x34403f, 0x463b33, 0x2f3846][Math.floor(r() * 4)];
         c.rect(-cw / 2, 0, cw, chh).fill(col).rect(-cw / 2, 0, cw, 2).fill({ color: 0x000000, alpha: 0.3 }).rect(-cw / 2 - 1, -1, 2, 3).fill(0x6b6255).rect(cw / 2 - 1, -1, 2, 3).fill(0x6b6255);
-        c.position.set(px, py); this.lines.addChild(c); this.cloths.push(c);
+        c.position.set(px, py); this.clothLayer.addChild(c); this.cloths.push(c);
       }
     }
   }
@@ -178,7 +179,7 @@ export class Scene {
     this.vents = [[Math.max(14, w * 0.03), h - 72 * (MOBILE ? 0.7 : 1)], [w - Math.max(18, w * 0.04), h - 72 * (MOBILE ? 0.85 : 1.2)]];
   }
   private vents: number[][] = [];
-  private parallax() { const dy = this.world.y - this.camFor(0); this.far.y = dy * 0.05; this.near.y = dy * 0.1; this.mid.y = this.lines.y = dy * 0.18; this.sky.y = dy * 0.02; this.fg.y = this.steam.y = dy * 0.6; }
+  private parallax() { const dy = this.world.y - this.camFor(0); this.far.y = dy * 0.05; this.near.y = dy * 0.1; this.mid.y = this.lines.y = this.clothLayer.y = dy * 0.18; this.sky.y = dy * 0.02; this.fg.y = this.steam.y = dy * 0.6; }
   private seedRain() { const n = Math.min(MOBILE ? 110 : 220, Math.round((this.w * this.h) / 2600)); this.drops = Array.from({ length: n }, () => ({ x: Math.random() * (this.w + 60), y: Math.random() * this.h, l: 8 + Math.random() * 14, v: 9 + Math.random() * 7 })); }
 
   // ---------- rows of hatches ----------
@@ -190,28 +191,28 @@ export class Scene {
     this.layout();
   }
   private buildRows() {
-    for (const r of this.rows) r.c.destroy({ children: true }); this.rows = [];
+    this.puddle.removeFromParent(); for (const r of this.rows) r.c.destroy({ children: true }); this.rows = [];
     const lv = this.level, { rowH, pw, cx } = this; const wl = cx - pw / 2 - 8, ww = pw + 16;
-    // the building core behind the tiers: wet brick, very low contrast
-    const wall = this.wall.clear(); const top = this.rowY(lv.rows) - rowH * 0.4, bot = this.rowY(-1) + this.h;
-    wall.rect(wl + 6, top, ww - 12, bot - top).fill(0x141a20);
-    const r = seeded(3);
-    for (let y = top; y < bot; y += 9) { const off = (Math.floor(y / 9) % 2) * 11; for (let x = wl + 6 + off; x < wl + ww - 8; x += 22) if (r() < 0.55) wall.rect(x, y, 20, 7).fill({ color: r() < 0.5 ? 0x1a2128 : 0x171d23, alpha: 1 }); }
-    wall.rect(wl + 6, top, 3, bot - top).fill({ color: 0x2c3640, alpha: 0.5 });
+    // steel scaffold behind the tiers: posts and cross braces, open so the city shows through
+    const wall = this.wall.clear(); const top = this.rowY(lv.rows) - rowH * 0.4, bot = this.rowY(-1);
+    for (const px of [wl + 4, wl + ww - 10]) wall.rect(px, top, 6, bot - top).fill(0x161c22).rect(px, top, 1.5, bot - top).fill({ color: 0x4a5560, alpha: 0.4 });
+    for (let ri = -1; ri < lv.rows; ri++) { const y0 = this.rowY(ri) - this.tileH(tilesOn(lv, Math.max(0, ri))) - 14, y1 = this.rowY(ri + 1) + 10; if (ri < 0) continue;
+      wall.moveTo(wl + 8, y1).lineTo(wl + ww - 8, y0).moveTo(wl + ww - 8, y1).lineTo(wl + 8, y0).stroke({ width: 2, color: 0x1a2128, alpha: 0.9 }); }
     // rooftop floor with a puddle
     const floor = new Container(); const fl = new Graphics(); const fy = this.rowY(-1);
     fl.rect(-20, fy - rowH * 0.62, this.w + 40, rowH * 0.62 + this.h).fill(0x161c22);
     fl.rect(-20, fy - rowH * 0.62, this.w + 40, 2).fill({ color: 0x46525d, alpha: 0.6 });
     for (let x = -20; x < this.w + 20; x += 44) fl.rect(x, fy - rowH * 0.62, 1, rowH * 0.62).fill({ color: 0x000000, alpha: 0.25 });
     fl.rect(-20, fy, this.w + 40, 10).fill(0x0e1216);
-    floor.addChild(fl, this.puddle); this.drawPuddle(fy - rowH * 0.22);
+    floor.addChild(fl, this.puddle); this.drawPuddle(fy - rowH * 0.3);
     this.rowsLayer.addChild(floor); this.rows.push({ c: floor, tiles: [] });
     for (let ri = 0; ri < lv.rows; ri++) {
       const c = new Container(); const y = this.rowY(ri); const n = tilesOn(lv, ri), th = this.tileH(n);
-      const ledge = new Graphics(); const sh = th + 14;
-      ledge.rect(wl, y - sh, ww, sh).fill(0x1b2229).rect(wl, y - sh, ww, 1.5).fill({ color: 0x4a5560, alpha: 0.55 });
-      ledge.rect(wl, y, ww, 7).fill(0x0d1115).rect(wl, y + 7, ww, 4).fill({ color: 0x000000, alpha: 0.35 });
-      ledge.rect(wl + ww * 0.1, y - sh + 3, ww * 0.5, 1).fill({ color: 0x8aa2b5, alpha: 0.08 });
+      const ledge = new Graphics(); const sh = th + 16;
+      for (let k = 0; k < 6; k++) ledge.rect(wl, y - sh * (1 - k / 6), ww, sh / 6 + 0.5).fill({ color: 0x1d252d, alpha: 0.08 + k * 0.09 });
+      ledge.rect(wl - 4, y - 3, ww + 8, 3).fill(0x3b4650).rect(wl - 4, y, ww + 8, 8).fill(0x151a1f).rect(wl - 4, y + 8, ww + 8, 6).fill({ color: 0x000000, alpha: 0.3 });
+      ledge.rect(wl + ww * 0.15, y - 2, ww * 0.4, 1).fill({ color: 0x9fb6c8, alpha: 0.18 });
+      for (let k = 0; k < 5; k++) { const dx = wl + ((k * 0.23 + ri * 0.17) % 1) * ww; ledge.rect(dx, y + 8, 1, 3 + ((k + ri) % 3) * 2).fill({ color: 0x9fb6c8, alpha: 0.25 }); }
       c.addChild(ledge);
       const tiles: Tile[] = [];
       for (let i = 0; i < n; i++) {
@@ -313,7 +314,7 @@ export class Scene {
   }
 
   // ---------- Hubie ----------
-  private hubieScale() { return (this.rowH * 0.92) / 96; }
+  private hubieScale() { return (this.rowH * 0.86) / 96; }
   private placeHubie() {
     const H = this.hubie; H.scale.set(this.hubieScale());
     const r = this.cleared - 1; H.x = r < 0 ? this.idleX() : this.tileX(r, Math.max(0, this.hubieTile)); H.y = this.feetY(r);
@@ -415,7 +416,7 @@ export class Scene {
       const H = this.hubie; this.hubieShadow.position.set(H.x, this.cleared === 0 && H.mode !== 'air' ? this.feetY(-1) : H.mode === 'air' ? H.y + 999 : this.feetY(this.cleared - 1));
       this.hubieShadow.visible = H.mode !== 'air' && H.mode !== 'fall';
       this.tag.position.set(H.x, H.y + 14);
-      this.onFrame(H.x, this.world.y + H.y - this.rowH * 0.95);
+      this.onFrame(H.x, this.world.y + H.y + 28);
     }
     this.parallax();
     // neon flicker and city glow
