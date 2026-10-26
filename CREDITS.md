@@ -1,7 +1,8 @@
 # Credits
 
 ## Art
-* Hubie, the Housebets mascot: official Housebets artwork, used by the Housebets project owner. Cut out and split into layers with the scripts in tools/ (rembg isnet model for the lower edge, the white sticker outline for the rest).
+* Hubie: an original drawing made in code (SVG parts in src/hubieArt.ts) of the Housebets mascot. The official Housebets look was used for identity only (species, face mask and eye bands, top hat with the H badge, navy tailcoat, orange waistcoat and bow tie). No official artwork is traced, cut out, copied or shipped with the game.
+* Everything else in the scene is procedural vector art drawn with PixiJS Graphics.
 
 ## Audio
 * public/audio/rain-loop.mp3: "Rain in the Gutter Loop" by Ogrebane, OpenGameArt.org, license CC0 (public domain dedication, commercial use allowed, no attribution required).

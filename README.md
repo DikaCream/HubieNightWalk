@@ -1,19 +1,14 @@
 # Hubie's Night Walk
 
-A climb and cash out game for Housebets. Hubie, the official Housebets mascot, rides his orange hover scooter over a rainy rooftop at night, one row of iron hatches at a time. You pick a tile on each row; a safe tile moves him up and raises the multiplier, a trap ends the round. Cash out whenever you like after the first safe step. The top row is the Summit, which pays the 10,000x maximum and cashes out by itself.
+A climb and cash out game for Housebets. Hubie, the Housebets mascot, walks over a rainy rooftop at night, one row of iron hatches at a time. You pick a tile on each row; a safe tile moves him up and raises the multiplier, a trap ends the round. Cash out whenever you like after the first safe step. The top row is the Summit, which pays the 10,000x maximum and cashes out by itself.
 
 Stack: Vite, React, TypeScript, PixiJS v8, GSAP, WebAudio. No wallet connect; the game runs on a $10,000 demo balance and is meant to be embedded in the Housebets casino.
 
 ## Look
 
-Hubie is the official Housebets art (`/workspace/refs/hubie-official.jpg`): the brown sloth with the cream face and dark eye mask, black top hat with the gold buckle, navy suit, white vest with gold buttons, navy bow tie, orange pocket square, a paper in one hand, on the orange hover scooter. He was cut out of the grey background with the white sticker outline kept (the outline closes the shape; the rembg isnet model fills in the open bottom edge between the wheels), then split into three layers in `src/art/`:
+Hubie is drawn in code, an original illustration of the Housebets mascot. The official art was studied for identity only (what he looks like), nothing was traced, cut out or copied: a chunky three toed sloth with a big round head, warm brown fur, a cream face mask, dark eye bands running from each eye toward the ear, half closed sleepy eyes and a gentle smile, a navy top hat with an orange band and a gold H buckle, a navy tailcoat with orange piping and tails, an orange waistcoat with gold buttons, a white shirt and an orange bow tie. For the night scene he has a cyan rim light on his left side from the billboard, a wet shine on the hat and fur, his collar turned up against the rain, and no scooter: he walks and hops on foot.
 
-* `hubie-body.webp` everything except the hat and the paper hand, with fur painted in under the brim so the head looks whole when the hat lifts
-* `hubie-hat.webp` the top hat, which lifts and tilts on a win, bounces on a hop and flies off on a fall
-* `hubie-hand.webp` the paper hand, pivoting at the wrist so it waves and flaps
-* `hubie-full.webp` the uncut cutout, and `hubie-parts.json` with the offsets
-
-`src/hubie.ts` animates the layers: a hover bob with a warm glow under the scooter, breathing, a forward lean when gliding, squash and stretch and a tilt on hops, a tumble on a fall. A safe hatch keeps a soft orange scooter glow instead of footprints. The header badge, intro, celebrations, favicon and touch icon all use the same art. The cutting scripts are in `tools/`.
+`src/hubieArt.ts` holds every part as an SVG string with gradients and dark outlines (fur tufts are generated): tail, coat tails with the raised collar, back arm, two legs with three clawed feet, torso with waistcoat and bow tie, head, eyes in four states (sleepy, blink, wide, happy), mouth in three (smile, grin, surprised O), top hat, front arm with three long hooked claws. `src/hubie.ts` rasterises each part once at 4 pixels per unit and hangs it on its joint. Animations: idle (breathing, blinking, slow head sway, tail sway), walk (alternating legs, arm swing, bob), hop (anticipation squash, stretch with arms out and legs tucked, landing squash, hat bounce), win (hat tip with a grin and a small fist pump), big win (jumps with both arms up), fall (wide eyes, hat flies off, tumble through the cracked hatch) and walking back on after a respawn. A safe hatch keeps glowing cyan claw prints. Tile multipliers are drawn on a layer above Hubie so he never hides the number you need. The header badge (bust), intro, celebrations, favicon and touch icon use the same parts. `npx tsx tools/hubie-sheet.ts` renders the pose sheet to `shots/hubie-sheet.png`, the side by side with the references and the icons.
 
 ## Audio
 
@@ -57,7 +52,7 @@ Every round has its own server seed. The game shows its SHA256 hash before you b
 * `src/fair.ts` HMAC stream in the browser
 * `src/game.ts` round controller: balance, bet, picks, cash out, auto play bookkeeping, history
 * `src/scene.ts` PixiJS scene: sky, parallax skyline, rows of hatches, Hubie hop and tumble, camera
-* `src/hubie.ts` Hubie built from the official art layers
+* `src/hubieArt.ts` Hubie drawn as SVG parts, `src/hubie.ts` the Pixi rig and animation
 * `src/sound.ts` music engine with a lookahead scheduler, sections and layers by height, stingers, offline render
 * `src/live.ts` live feed interface. `SimulatedLive` invents players for the demo; swap `liveSource` for real casino data
 * `src/fx.ts` pooled 2D particle canvas from the slot, with a smoke kind added

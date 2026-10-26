@@ -32,9 +32,6 @@ const H_GLYPH = (x: number, y: number, s: number, col: string) =>
 // ---------------- head ----------------
 const HC = { x: 0, y: -83, rx: 27, ry: 23.5 };
 const headOutline = tufts(HC.x, HC.y, HC.rx, HC.ry, 26, a => 0.04 + 0.1 * Math.abs(Math.cos(a)) * (Math.sin(a) > -0.3 ? 1 : 0.5));
-const rimArc = (cx: number, cy: number, rx: number, ry: number, a0: number, a1: number) => {
-  let d = ''; for (let k = 0; k <= 12; k++) { const a = a0 + ((a1 - a0) * k) / 12; d += `${k ? 'L' : 'M'}${f(cx + Math.cos(a) * rx)},${f(cy + Math.sin(a) * ry)}`; } return d;
-};
 const band = 'M-3.6,-84.6 C-5.6,-89.4 -12,-90.6 -17,-89 C-21.5,-87.6 -25.5,-84 -27.6,-78.6 C-24.6,-77.6 -20.4,-79 -16.4,-80.2 C-11,-81.2 -6.4,-79.8 -3.8,-81.6 C-2.6,-82.4 -2.6,-83.8 -3.6,-84.6Z';
 /** Cyan rim light from the billboard: the outline stroked thick, clipped to the shape and to its right side. */
 const rimLight = (id: string, d: string, x0: number, w = 3.2, op = 0.9) => `<clipPath id="${id}s"><path d="${d}"/></clipPath><clipPath id="${id}r"><rect x="${x0}" y="-200" width="100" height="300"/></clipPath><g clip-path="url(#${id}r)"><path d="${d}" clip-path="url(#${id}s)" stroke="${CYAN}" stroke-width="${w}" fill="none" opacity="${op}"/></g>`;
