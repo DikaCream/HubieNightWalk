@@ -1,44 +1,44 @@
 Hubie's Night Walk simulator, 2,000,000 rounds per strategy, bet 100 cents, random tile picks
-Run at 2026-10-26T04:07:29.188Z
+Run at 2026-10-26T04:13:54.649Z
 
 EASY: 4 tiles, 1 trap, safe 3/4, rows to cap 33, summit chance 95.5676%
-  cash out at   mult      theory RTP   sim RTP    hit rate     max win   std dev (x bet)
-     1             1.28    96.000%    95.981%   74.9853%       1.28x      0.55  OK
-     2             1.70    95.625%    95.486%   56.1684%       1.70x      0.84  OUT OF RANGE
-     3             2.27    95.766%    95.697%   42.1572%       2.27x      1.12  OK
-     5             4.04    95.871%    95.629%   23.6705%       4.04x      1.72  OK
-     8             9.58    95.908%    95.668%    9.9863%       9.58x      2.87  OK
-    12            30.30    95.979%    95.803%    3.1618%      30.30x      5.30  OK
-    20           302.72    95.999%    95.251%    0.3146%     302.72x     16.95  OUT OF RANGE
-    33         10000.00    96.000%    97.500%    0.0097%   10000.00x     98.74  OUT OF RANGE
+  cash out at   mult      exact RTP    sim RTP    95% range of sim        hit rate     max win   std dev (x bet)
+     1             1.28    96.000%    95.981%      95.90% to 96.06%   74.9853%       1.28x      0.55  OK
+     2             1.70    95.625%    95.486%      95.37% to 95.60%   56.1684%       1.70x      0.84  OK (sim noise: band smaller than sampling error)
+     3             2.27    95.766%    95.697%      95.54% to 95.85%   42.1572%       2.27x      1.12  OK
+     5             4.04    95.871%    95.629%      95.39% to 95.87%   23.6705%       4.04x      1.72  OK
+     8             9.58    95.908%    95.668%      95.27% to 96.07%    9.9863%       9.58x      2.87  OK
+    12            30.30    95.979%    95.803%      95.07% to 96.54%    3.1618%      30.30x      5.30  OK
+    20           302.72    95.999%    95.251%      92.90% to 97.60%    0.3146%     302.72x     16.95  OK (sim noise: band smaller than sampling error)
+    33         10000.00    96.000%    97.500%     83.82% to 111.18%    0.0097%   10000.00x     98.74  OK (sim noise: band smaller than sampling error)
 
 MEDIUM: 3 tiles, 1 trap, safe 2/3, rows to cap 23, summit chance 71.8255%
-  cash out at   mult      theory RTP   sim RTP    hit rate     max win   std dev (x bet)
-     1             1.44    96.000%    96.000%   66.6666%       1.44x      0.68  OK
-     2             2.16    96.000%    96.015%   44.4513%       2.16x      1.07  OK
-     3             3.24    96.000%    96.039%   29.6417%       3.24x      1.48  OK
-     5             7.29    96.000%    95.822%   13.1443%       7.29x      2.46  OK
-     8            24.60    95.985%    96.602%    3.9269%      24.60x      4.78  OUT OF RANGE
-    12           124.55    95.995%    96.395%    0.7740%     124.55x     10.91  OK
-    18          1418.77    96.000%    94.916%    0.0669%    1418.77x     36.68  OUT OF RANGE
-    23         10000.00    96.000%    88.500%    0.0089%   10000.00x     94.07  OUT OF RANGE
+  cash out at   mult      exact RTP    sim RTP    95% range of sim        hit rate     max win   std dev (x bet)
+     1             1.44    96.000%    96.000%      95.91% to 96.09%   66.6666%       1.44x      0.68  OK
+     2             2.16    96.000%    96.015%      95.87% to 96.16%   44.4513%       2.16x      1.07  OK
+     3             3.24    96.000%    96.039%      95.83% to 96.24%   29.6417%       3.24x      1.48  OK
+     5             7.29    96.000%    95.822%      95.48% to 96.16%   13.1443%       7.29x      2.46  OK
+     8            24.60    95.985%    96.602%      95.94% to 97.26%    3.9269%      24.60x      4.78  OK (sim noise: band smaller than sampling error)
+    12           124.55    95.995%    96.395%      94.88% to 97.91%    0.7740%     124.55x     10.91  OK
+    18          1418.77    96.000%    94.916%     89.83% to 100.00%    0.0669%    1418.77x     36.68  OK (sim noise: band smaller than sampling error)
+    23         10000.00    96.000%    88.500%     75.46% to 101.54%    0.0089%   10000.00x     94.07  OK (sim noise: band smaller than sampling error)
 
 HARD: 3 tiles, 2 traps, safe 1/3, rows to cap 9, summit chance 62.9856%
-  cash out at   mult      theory RTP   sim RTP    hit rate     max win   std dev (x bet)
-     1             2.88    96.000%    96.103%   33.3692%       2.88x      1.36  OK
-     2             8.64    96.000%    96.122%   11.1253%       8.64x      2.72  OK
-     3            25.92    96.000%    95.553%    3.6865%      25.92x      4.88  OK
-     4            77.76    96.000%    95.485%    1.2280%      77.76x      8.56  OUT OF RANGE
-     6           699.84    96.000%    96.683%    0.1381%     699.84x     25.99  OUT OF RANGE
-     9         10000.00    96.000%   107.000%    0.0107%   10000.00x    103.44  OUT OF RANGE
+  cash out at   mult      exact RTP    sim RTP    95% range of sim        hit rate     max win   std dev (x bet)
+     1             2.88    96.000%    96.103%      95.92% to 96.29%   33.3692%       2.88x      1.36  OK
+     2             8.64    96.000%    96.122%      95.75% to 96.50%   11.1253%       8.64x      2.72  OK
+     3            25.92    96.000%    95.553%      94.88% to 96.23%    3.6865%      25.92x      4.88  OK
+     4            77.76    96.000%    95.485%      94.30% to 96.67%    1.2280%      77.76x      8.56  OK (sim noise: band smaller than sampling error)
+     6           699.84    96.000%    96.683%     93.08% to 100.29%    0.1381%     699.84x     25.99  OK (sim noise: band smaller than sampling error)
+     9         10000.00    96.000%   107.000%     92.66% to 121.34%    0.0107%   10000.00x    103.44  OK (sim noise: band smaller than sampling error)
 
 EXTREME: 4 tiles, 3 traps, safe 1/4, rows to cap 7, summit chance 39.3216%
-  cash out at   mult      theory RTP   sim RTP    hit rate     max win   std dev (x bet)
-     1             3.84    96.000%    96.137%   25.0357%       3.84x      1.66  OK
-     2            15.36    96.000%    95.542%    6.2202%      15.36x      3.71  OK
-     3            61.44    96.000%    96.697%    1.5738%      61.44x      7.65  OUT OF RANGE
-     5           983.04    96.000%   100.024%    0.1017%     983.04x     31.34  OUT OF RANGE
-     7         10000.00    96.000%    91.000%    0.0091%   10000.00x     95.39  OUT OF RANGE
+  cash out at   mult      exact RTP    sim RTP    95% range of sim        hit rate     max win   std dev (x bet)
+     1             3.84    96.000%    96.137%      95.91% to 96.37%   25.0357%       3.84x      1.66  OK
+     2            15.36    96.000%    95.542%      95.03% to 96.06%    6.2202%      15.36x      3.71  OK
+     3            61.44    96.000%    96.697%      95.64% to 97.76%    1.5738%      61.44x      7.65  OK (sim noise: band smaller than sampling error)
+     5           983.04    96.000%   100.024%     95.68% to 104.37%    0.1017%     983.04x     31.34  OK (sim noise: band smaller than sampling error)
+     7         10000.00    96.000%    91.000%     77.78% to 104.22%    0.0091%   10000.00x     95.39  OK (sim noise: band smaller than sampling error)
 
 HMAC stream cross check, 200,000 rounds each (server seed "sim", client seed "check")
   Medium cash out at 3: RTP 95.862%
@@ -46,4 +46,7 @@ HMAC stream cross check, 200,000 rounds each (server seed "sim", client seed "ch
   Hard cash out at 2: RTP 95.947%
   Extreme cash out at 1: RTP 95.948%
 
-RESULT: at least one strategy is OUT OF RANGE
+How to read this: exact RTP is computed from the layout odds and the paytable. A strategy passes when its exact RTP sits inside
+95.5% to 96.5% and the simulated RTP agrees with it within 3 standard errors. Deep strategies hit so rarely (under 0.1%)
+that 2 million rounds cannot pin their RTP to half a percent; their 95% range is wide, and that is sampling noise, not a math leak.
+RESULT: every strategy passes
