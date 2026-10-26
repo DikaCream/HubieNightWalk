@@ -105,7 +105,7 @@ export class Scene {
       const beam = new Graphics(); beam.rect(36, y + 2, this.w - this.padR - 40, 5).fill(0x14323d).rect(36, y + 7, this.w - this.padR - 40, 2).fill({ color: 0x000000, alpha: 0.4 });
       for (let x = 60; x < this.w - this.padR - 10; x += 70) beam.rect(x, y + 9, 4, this.rowH - 12).fill({ color: 0x0f2832, alpha: 0.9 });
       const lights = new Graphics(); for (let x = 44; x < this.w - this.padR - 8; x += 16) lights.circle(x, y + 4.5, 1.8).fill(isSummit(lv, r) ? GOLD : CYAN); lights.alpha = 0.12;
-      const label = new Text({ text: fmtMult(multAt(lv, r + 1)), style: { fontFamily: 'Archivo, system-ui, sans-serif', fontWeight: '800', fontSize: Math.round(this.rowH * 0.17), fill: isSummit(lv, r) ? GOLD : 0x7fdfe4 } });
+      const label = new Text({ text: fmtMult(multAt(lv, r + 1)), style: { fontFamily: 'system-ui, sans-serif', fontWeight: '800', fontSize: Math.round(this.rowH * 0.17), fill: isSummit(lv, r) ? GOLD : 0x7fdfe4 } });
       label.anchor.set(0, 1); label.position.set(6, y - 4); label.alpha = 0.75;
       c.addChild(beam, lights, label);
       const tiles: Graphics[] = [];
@@ -113,6 +113,11 @@ export class Scene {
       this.rowsLayer.addChild(c); this.rows.push({ c, tiles, lights, label });
       if (r < this.cleared) lights.alpha = 1;
       tiles.forEach((_, i) => this.drawTile(r, i));
+      if (isSummit(lv, r)) {
+        const { x, w, h } = this.tileRectWorld(r, 0);
+        const t = new Text({ text: 'SUMMIT 10,000x', style: { fontFamily: 'system-ui, sans-serif', fontWeight: '900', fontSize: Math.round(h * 0.34), fill: GOLD, letterSpacing: 1 } });
+        t.anchor.set(0.5); t.position.set(x + w / 2, y - h / 2); c.addChild(t);
+      }
     }
   }
   private R(r: number) { return this.rows[r + 1]; }
@@ -138,11 +143,6 @@ export class Scene {
     } else {
       // closed vent grille
       for (let k = 1; k < 4; k++) g.moveTo(x + 9, y + (h * k) / 4).lineTo(x + w - 9, y + (h * k) / 4).stroke({ width: 2, color: st === 'active' ? CYAN : 0x2a5561, alpha: st === 'active' ? 0.55 : 0.8 });
-    }
-    if (summit && row.tiles.length === 1) {
-      const old = g.children.slice(); old.forEach(o => o.destroy());
-      const t = new Text({ text: 'SUMMIT  10,000x', style: { fontFamily: 'Archivo, system-ui, sans-serif', fontWeight: '900', fontSize: Math.round(h * 0.34), fill: GOLD, letterSpacing: 1 } });
-      t.anchor.set(0.5); t.position.set(x + w / 2, y + h / 2); g.addChild(t);
     }
   }
   private tileRectWorld(r: number, i: number) { const n = tilesOn(this.level, r); const w = this.tileW(n), h = this.rowH * 0.52; return { x: this.tileX(r, i) - w / 2, w, h }; }
@@ -206,4 +206,4 @@ export class Scene {
 
 const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
 function lerpColor(a: number, b: number, t: number) { const r = ((a >> 16) & 255) + ((((b >> 16) & 255) - ((a >> 16) & 255)) * t), g = ((a >> 8) & 255) + ((((b >> 8) & 255) - ((a >> 8) & 255)) * t), bl = (a & 255) + (((b & 255) - (a & 255)) * t); return (Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(bl); }
-export const fmtMult = (m: number) => (m >= 1000 ? m.toLocaleString('en-US', { maximumFractionDigits: 0 }) : m.toFixed(2)) + 'x';
+export const fmtMult = (m: number) => (m >= 10000 ? '10,000' : m.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) + 'x';
