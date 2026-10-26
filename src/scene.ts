@@ -50,7 +50,7 @@ export class Scene {
   tileX(r: number, i: number) { const n = tilesOn(this.level, r); const tw = this.tileW(n); const cx = 52 + (this.w - this.padR - 52) / 2; return cx + (i - (n - 1) / 2) * (tw + 10); }
   private camFor(cleared: number) { return this.h * 0.74 - this.rowY(cleared - 1); }
   /** Screen rectangle of a tile (CSS pixels relative to the canvas). */
-  tileRect(r: number, i: number) { const n = tilesOn(this.level, r); const tw = this.tileW(n), th = this.rowH * 0.52; const x = this.tileX(r, i) - tw / 2, y = this.world.y + this.rowY(r) - th; return { x, y, w: tw, h: th }; }
+  tileRect(r: number, i: number) { const n = tilesOn(this.level, r); const tw = this.tileW(n), th = this.rowH * 0.52; const x = this.tileX(r, i) - tw / 2, y = this.camY + this.rowY(r) - th; return { x, y, w: tw, h: th }; }
 
   layout() {
     this.w = this.app.screen.width; this.h = this.app.screen.height;
@@ -201,6 +201,14 @@ export class Scene {
   hubieScreen() { const r = this.app.canvas.getBoundingClientRect(); return { x: r.left + this.hubie.x, y: r.top + this.world.y + this.hubie.y - this.hubie.height * 0.6 }; }
   tileScreen(r: number, i: number) { const c = this.app.canvas.getBoundingClientRect(); const t = this.tileRect(r, i); return { x: c.left + t.x + t.w / 2, y: c.top + t.y + t.h / 2 }; }
   reset(lv: Level) { this.setLevel(lv); }
+  /** Reveal the whole layout at the end of a round, sweeping upward from row `from`. */
+  reveal(layout: boolean[][], from: number) {
+    layout.forEach((row, r) => row.forEach((trap, i) => {
+      const s = this.states[r]?.[i]; if (s === undefined || s === 'safePicked' || s === 'trapPicked') return;
+      const ns: TileState = trap ? 'trap' : 'safe'; const delay = this.fast ? 0 : Math.max(0, r - from) * 0.05;
+      if (delay === 0) this.setState(r, i, ns); else this.track(gsap.delayedCall(delay, () => this.setState(r, i, ns)));
+    }));
+  }
   get camSettled() { return Math.abs(this.world.y - this.camY) < 0.5; }
 }
 
