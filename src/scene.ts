@@ -26,7 +26,7 @@ function vignetteTexture() {
   x.fillStyle = g; x.fillRect(0, 0, 256, 256); return Texture.from(c);
 }
 
-interface Tile { c: Container; g: Graphics; chip: Graphics; chipTxt: Text; txt: Text; txtShade: Text; prints: Graphics; w: number; h: number; mult: string }
+interface Tile { lab: Container; c: Container; g: Graphics; chip: Graphics; chipTxt: Text; txt: Text; txtShade: Text; prints: Graphics; w: number; h: number; mult: string }
 interface Row { c: Container; tiles: Tile[] }
 interface Drop { x: number; y: number; l: number; v: number }
 interface Puff { g: Graphics; vx: number; vy: number; life: number; max: number }
@@ -38,7 +38,7 @@ export class Scene {
   private sky = new Graphics(); private far = new Container(); private farG = new Graphics(); private farWin = new Graphics();
   private near = new Graphics(); private mid = new Container(); private lines = new Graphics(); private clothLayer = new Container(); private cloths: Graphics[] = [];
   private billboard = new Container(); private neon!: Text; private neonGlow!: Sprite; private puddle = new Graphics();
-  private world = new Container(); private rowsLayer = new Container(); private wall = new Graphics();
+  private world = new Container(); private rowsLayer = new Container(); private labels = new Container(); private wall = new Graphics();
   private rain = new Graphics(); private fg = new Graphics(); private steam = new Container(); private vignette!: Sprite;
   private beam = new Graphics(); private moon!: Sprite; private fireworks = new Container();
   private glow!: Texture; private drops: Drop[] = []; private puffs: Puff[] = []; private ripples: { x: number; y: number; t: number }[] = [];
@@ -63,7 +63,8 @@ export class Scene {
     await loadHubieArt(); this.hubie = new Hubie();
     this.tagTxt = new Text({ text: '', style: { fontFamily: FONT, fontWeight: '900', fontSize: 12, fill: 0xeafcff } }); this.tagTxt.anchor.set(0.5);
     this.tag.addChild(this.tagBg, this.tagTxt); this.tag.visible = false;
-    this.world.addChild(this.wall, this.rowsLayer, this.hubieShadow, this.hubie, this.tag);
+    // tile multipliers sit on their own layer above Hubie so his hat never hides the number you need to read
+    this.world.addChild(this.wall, this.rowsLayer, this.hubieShadow, this.hubie, this.labels, this.tag);
     this.moon = new Sprite(this.glow); this.moon.anchor.set(0.5); this.moon.tint = 0xbfcad3; this.moon.alpha = 0.22;
     this.app.stage.addChild(this.sky, this.moon, this.fireworks, this.far, this.near, this.mid, this.lines, this.clothLayer, this.beam, this.world, this.steam, this.fg, this.rain, this.vignette);
     this.app.renderer.on('resize', () => this.layout());
@@ -192,7 +193,7 @@ export class Scene {
     this.layout();
   }
   private buildRows() {
-    this.puddle.removeFromParent(); for (const r of this.rows) r.c.destroy({ children: true }); this.rows = [];
+    this.puddle.removeFromParent(); for (const r of this.rows) { for (const t of r.tiles) t.lab.destroy({ children: true }); r.c.destroy({ children: true }); } this.rows = [];
     const lv = this.level, { rowH, pw, cx } = this; const wl = cx - pw / 2 - 8, ww = pw + 16;
     // steel scaffold behind the tiers: posts and cross braces, open so the city shows through
     const wall = this.wall.clear(); const top = this.rowY(lv.rows) - rowH * 0.4, bot = this.rowY(-1);
@@ -223,8 +224,9 @@ export class Scene {
         const txt = new Text({ text: mult, style: { fontFamily: FONT, fontWeight: '900', fontSize: fs, fill: 0x9aa4ad } }); txt.anchor.set(0.5);
         const txtShade = new Text({ text: mult, style: { fontFamily: FONT, fontWeight: '900', fontSize: fs, fill: 0x000000 } }); txtShade.anchor.set(0.5); txtShade.y = -1.2; txtShade.alpha = 0.7;
         const chipTxt = new Text({ text: mult.replace('SUMMIT  ', ''), style: { fontFamily: FONT, fontWeight: '900', fontSize: Math.round(fs * 0.92), fill: 0x4a2a00 } }); chipTxt.anchor.set(0.5);
-        tc.addChild(g, txtShade, txt, chip, chipTxt, prints); tc.position.set(this.tileX(ri, i), this.tileCY(ri));
-        c.addChild(tc); tiles.push({ c: tc, g, chip, chipTxt, txt, txtShade, prints, w: this.tileW(n), h: th, mult });
+        const lab = new Container(); lab.addChild(txtShade, txt); this.labels.addChild(lab);
+        tc.addChild(g, chip, chipTxt, prints); tc.position.set(this.tileX(ri, i), this.tileCY(ri));
+        c.addChild(tc); tiles.push({ lab, c: tc, g, chip, chipTxt, txt, txtShade, prints, w: this.tileW(n), h: th, mult });
       }
       this.rowsLayer.addChild(c); this.rows.push({ c, tiles });
       tiles.forEach((_, i) => this.drawTile(ri, i));
@@ -320,7 +322,7 @@ export class Scene {
   // ---------- Hubie ----------
   /** Hubie is 137 units tall with the hat: about 100 to 120 CSS px on a phone, a little taller on desktop. */
   private hubieScale() { const n = this.level ? Math.max(...Array.from({ length: Math.min(3, this.level.rows) }, (_, r) => tilesOn(this.level, r))) : 3;
-    const px = this.w < 600 ? Math.max(100, Math.min(118, this.rowH * 1.3)) : Math.min(140, this.rowH * 1.2); return Math.min(px / 137, (this.tileW(n) + 40) / 84); }
+    const px = this.w < 600 ? Math.max(100, Math.min(112, this.rowH * 1.15)) : Math.min(140, this.rowH * 1.2); return Math.min(px / 137, (this.tileW(n) + 40) / 84); }
   private placeHubie() {
     const H = this.hubie; H.scale.set(this.hubieScale());
     const r = this.cleared - 1; H.x = r < 0 ? this.idleX() : this.tileX(r, Math.max(0, this.hubieTile)); H.y = this.feetY(r);
@@ -456,6 +458,8 @@ export class Scene {
     // steam from foreground vents
     if (this.vents.length && Math.random() < 0.12) { const v = this.vents[Math.random() < 0.5 ? 0 : 1]; this.puff(v[0] + (Math.random() - 0.5) * 8, v[1], 0x9aa6af, 1.2, this.steam); }
     for (let k = this.puffs.length - 1; k >= 0; k--) { const p = this.puffs[k]; p.life += dt; p.g.x += p.vx * dt; p.g.y += p.vy * dt; p.g.scale.set(1 + p.life / 30); p.g.alpha = Math.max(0, 1 - p.life / p.max); if (p.life > p.max) { p.g.destroy(); this.puffs.splice(k, 1); } }
+    // multiplier labels follow their hatch (hover lift, press squash, flip)
+    for (const row of this.rows) for (const t of row.tiles) { t.lab.position.copyFrom(t.c.position); t.lab.scale.copyFrom(t.c.scale); t.lab.alpha = t.c.alpha; }
     // active row breathes
     if (this.level) { const row = this.R(this.cleared); if (row) row.tiles.forEach((t, i) => { if (this.states[this.cleared]?.[i] === 'active') t.g.alpha = 0.9 + Math.sin(now * 4 + i) * 0.1; else t.g.alpha = 1; }); }
   }

@@ -31,6 +31,10 @@ async function hubieCrop(p, name) { const r = await p.evaluate(() => window.__hu
   const pad = 14; const clip = { x: Math.max(0, r.x - pad), y: Math.max(0, r.y - pad), width: Math.min(W, r.w + pad * 2), height: Math.min(H, r.h + pad * 2) };
   if (r.h < (mobile ? 60 : 64)) bad.push(`${TAG} hubie only ${r.h | 0} px tall`); log.push(`hubie ${name}: ${r.w | 0}x${r.h | 0} css px`);
   await p.screenshot({ path: SHOT + 'hubie-' + name + '.png', clip }); }
+/** Hubie must stay inside the screen. The multipliers are drawn on a layer above him, so his hat cannot hide them. */
+async function hubieCheck(p, where) { const o = await p.evaluate(() => { const r = window.__hubieRect(); if (!r) return ['no rect']; const out = [];
+  if (r.x < -1 || r.x + r.w > innerWidth + 1) out.push(`hubie outside screen x ${r.x | 0}..${(r.x + r.w) | 0}`);
+  return out; }); for (const x of o) bad.push(`${TAG} ${where}: ${x}`); }
 const click = (p, sel) => (mobile ? p.tap(sel) : p.click(sel));
 async function until(p, fn, what, ms = 25000) { const t0 = Date.now(); while (Date.now() - t0 < ms) { const s = await st(p); if (fn(s)) return s; await wait(60); } bad.push(`${TAG} FROZEN waiting for ${what}`); await p.screenshot({ path: SHOT + 'frozen.png' }); throw new Error('frozen ' + what); }
 async function layoutCheck(p, where) {
@@ -61,7 +65,9 @@ async function playRound(p, level, k, trap, shotName) {
     if (tile < 0) { bad.push(`${TAG} no ${isTrap ? 'trap' : 'safe'} tile on row ${r}`); break; }
     await p.waitForSelector(`.tile-btn:nth-child(${tile + 1}):not([disabled])`, { timeout: 15000 });
     await click(p, `.tile-btn:nth-child(${tile + 1})`);
+    if (isTrap && shotName) { await wait(mobile ? 420 : 380); await p.screenshot({ path: SHOT + shotName + '-fall.png' }); }
     s = await until(p, x => !x.busy && (x.status !== 'live' || x.step === r + 1), 'pick');
+    if (!isTrap && s.status === 'live') { await wait(150); await hubieCheck(p, `${level} row ${r}`); }
     if (r === 0 && shotName && !isTrap) { await layoutCheck(p, 'in round'); await p.screenshot({ path: SHOT + shotName + '-climb.png' }); }
     if (r === 3 && !isTrap && !midShots.has(level)) { midShots.add(level); await wait(500); await layoutCheck(p, 'mid climb'); await p.screenshot({ path: SHOT + level + '-midclimb.png' }); await hubieCrop(p, level + '-mid'); const a = await audio(p); log.push(`${level} row 4 music ${a.section} intensity ${a.intensity}`); }
   }
@@ -83,7 +89,7 @@ async function playRound(p, level, k, trap, shotName) {
 
 // ---------- main session ----------
 const p = await open(`?debugseed=${SEED}`);
-await layoutCheck(p, 'idle'); await p.screenshot({ path: SHOT + 'idle.png' }); await hubieCrop(p, 'idle');
+await layoutCheck(p, 'idle'); await hubieCheck(p, 'idle'); await p.screenshot({ path: SHOT + 'idle.png' }); await hubieCrop(p, 'idle');
 { const a0 = await audio(p); if (a0.state === 'running') bad.push(TAG + ' audio started before any gesture'); }
 await setBet(p);
 await click(p, '.panel .main'); await wait(50); await until(p, s => s.status === 'live' && !s.busy, 'first bet').catch(() => {});
@@ -110,7 +116,7 @@ await click(p, '.lvl:has-text("Easy")'); await wait(150);
   await click(p, '.panel .main'); await until(p, s => s.status === 'live' && !s.busy, 'bet'); expected -= s0.bet;
   for (let r = 0; r < 12; r++) { const t = lay[r].findIndex(x => !x); await p.waitForSelector(`.tile-btn:nth-child(${t + 1}):not([disabled])`); await click(p, `.tile-btn:nth-child(${t + 1})`); await until(p, x => !x.busy && x.step === r + 1, 'pick'); }
   await click(p, '.panel .main'); await p.waitForSelector('.celeb', { timeout: 8000 }).catch(() => bad.push(TAG + ' no celebration at 30.30x'));
-  await wait(500); await hubieCrop(p, 'hat-tip'); await wait(1400); await layoutCheck(p, 'real hat tip'); await p.screenshot({ path: SHOT + 'real-hat-tip.png' });
+  await wait(500); await hubieCrop(p, 'hat-tip'); await p.screenshot({ path: SHOT + 'hat-tip-scene.png' }); await wait(1400); await layoutCheck(p, 'real hat tip'); await p.screenshot({ path: SHOT + 'real-hat-tip.png' });
   expected += payoutCents(s0.bet, LEVELS.easy.mult100[12]); await closeOverlays(p); const s = await st(p); if (s.balance !== expected) bad.push(`${TAG} balance after 30.30x ${s.balance} vs ${expected}`); }
 
 // ---------- auto play ----------
