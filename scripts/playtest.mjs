@@ -64,7 +64,7 @@ async function playRound(p, level, k, trap, shotName) {
     const isTrap = trap && r === k; const row = lay[r]; const tile = row.findIndex(t => t === isTrap);
     if (tile < 0) { bad.push(`${TAG} no ${isTrap ? 'trap' : 'safe'} tile on row ${r}`); break; }
     await p.waitForSelector(`.tile-btn:nth-child(${tile + 1}):not([disabled])`, { timeout: 15000 }).catch(async e => { const x = await st(p); console.log('STUCK', level, r, JSON.stringify({ ...x, history: undefined })); await p.screenshot({ path: SHOT + 'stuck.png' }); throw e; });
-    await click(p, `.tile-btn:nth-child(${tile + 1})`);
+    await click(p, `.tile-btn:nth-child(${tile + 1})`).catch(async e => { const x = await st(p); const n = await p.$$eval('.tile-btn', b => b.map(e => e.outerHTML.slice(0, 120))); console.log('TAPFAIL', level, r, JSON.stringify({ ...x, history: undefined }), JSON.stringify(n)); await p.screenshot({ path: SHOT + 'tapfail.png' }); throw e; });
     if (isTrap && shotName) { await wait(mobile ? 420 : 380); await p.screenshot({ path: SHOT + shotName + '-fall.png' }); }
     s = await until(p, x => !x.busy && (x.status !== 'live' || x.step === r + 1), 'pick');
     if (!isTrap && s.status === 'live') { await wait(150); await hubieCheck(p, `${level} row ${r}`); }
