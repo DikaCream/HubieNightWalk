@@ -1,5 +1,5 @@
 Hubie's Night Walk simulator, 2,000,000 rounds per strategy, bet 100 cents, random tile picks
-Run at 2026-10-26T05:50:41.545Z
+Run at 2026-10-26T07:20:03.198Z
 
 EASY: 4 tiles, 1 trap, safe 3/4, rows to cap 33, summit chance 95.5676%
   cash out at   mult      exact RTP    sim RTP    95% range of sim        hit rate     max win   std dev (x bet)

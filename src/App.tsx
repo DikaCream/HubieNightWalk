@@ -5,7 +5,7 @@ import { Scene, fmtMult } from './scene';
 import { FX } from './fx';
 import { LEVELS, LEVEL_ORDER, MAX_BET, MIN_BET, buildLayout, floatsNeeded, isSummit, tilesOn, type LevelId } from './engine';
 import { hmacFloats, randomHex, sha256Hex } from './fair';
-import { getVolume, isMuted, renderOffline, setIntensity, setMuted, setVolume, sfx, unlock } from './sound';
+import { audioState, getVolume, isMuted, renderOffline, setIntensity, setMuted, setVolume, sfx, unlock } from './sound';
 import { liveSource, type LiveEvent } from './live';
 
 const game = new Game();
@@ -23,14 +23,16 @@ const tierOf = (m: number) => (m >= 10000 ? 4 : m >= 1000 ? 3 : m >= 100 ? 2 : m
 type Celeb = { tier: number; mult: number; amount: number; forced?: boolean };
 type Tab = 'rules' | 'paytable' | 'fair' | 'history';
 
-declare global { interface Window { __hnw?: () => unknown; __renderMusic?: typeof renderOffline } }
+declare global { interface Window { __hnw?: () => unknown; __hnwAudio?: typeof audioState; __hubieRect?: () => unknown; __renderMusic?: typeof renderOffline } }
 if (q.has('musiccheck')) window.__renderMusic = renderOffline; // offline music render for scripts/render-music.mjs
+window.__hnwAudio = audioState;
 window.__hnw = () => ({ balance: game.balance, bet: game.betCents, level: game.level, status: game.round?.status ?? 'idle', step: game.round?.step ?? 0, busy: game.busy, auto: game.autoRunning, clientSeed: game.clientSeed, nonce: game.nonce, history: game.history.map(h => ({ ...h })) });
 
 export default function App() {
   const [, bump] = useReducer((x: number) => x + 1, 0);
   const stageRef = useRef<HTMLDivElement>(null); const fxRef = useRef<HTMLCanvasElement>(null); const winRef = useRef<HTMLDivElement>(null);
   const scene = useRef<Scene | null>(null); const fx = useRef<FX | null>(null);
+  window.__hubieRect = () => scene.current?.hubieRect();
   const [rects, setRects] = useState<{ x: number; y: number; w: number; h: number }[]>([]);
   const [celeb, setCeleb] = useState<Celeb | null>(null); const celebDone = useRef<(() => void) | null>(null);
   const [toast, setToast] = useState<{ text: string; kind: 'win' | 'lose' } | null>(null);
@@ -70,7 +72,7 @@ export default function App() {
   }
   useEffect(updateRects);
 
-  function intensityFor(step: number) { const L = game.lv; const f = step / L.rows; const m = L.mult100[step] / 100; return f >= 0.75 || m >= 100 ? 4 : f >= 0.5 || m >= 20 ? 3 : f >= 0.25 || m >= 5 ? 2 : 1; }
+  function intensityFor(step: number) { const L = game.lv; const f = step / L.rows; const m = L.mult100[step] / 100; return f >= 0.6 || m >= 50 ? 4 : f >= 0.3 || m >= 8 ? 3 : step >= 2 ? 2 : 1; }
 
   async function doBet() {
     unlock(); if (!game.canBet()) { if (game.betCents > game.balance) flash('Not enough demo balance for that bet', 'lose'); return false; }

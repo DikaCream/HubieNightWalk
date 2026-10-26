@@ -20,11 +20,17 @@ async function open(query, intro = false) {
   await ctx.addInitScript(([c, i]) => { localStorage.setItem('hnw-client', c); if (!i) localStorage.setItem('hnw-intro', '2'); }, [CLIENT, intro]);
   const p = await ctx.newPage();
   p.on('pageerror', e => errs.push(TAG + ' pageerror ' + e.message));
-  p.on('console', m => { if (m.type() === 'error') errs.push(TAG + ' console ' + m.text()); });
+  p.on('console', m => { if (m.type() === 'error') errs.push(TAG + ' console ' + m.text()); if (/audio|AudioContext/i.test(m.text()) && m.type() === 'warning') errs.push(TAG + ' audio warning ' + m.text()); });
   await p.goto('http://127.0.0.1:4190/' + query); await p.waitForSelector('.panel'); await wait(1200);
   return p;
 }
 const st = p => p.evaluate(() => window.__hnw());
+const audio = p => p.evaluate(() => window.__hnwAudio());
+/** Crops a box around Hubie, scaled up, so his look can be compared with the official art. */
+async function hubieCrop(p, name) { const r = await p.evaluate(() => window.__hubieRect()); if (!r) return bad.push(TAG + ' no hubie rect');
+  const pad = 14; const clip = { x: Math.max(0, r.x - pad), y: Math.max(0, r.y - pad), width: Math.min(W, r.w + pad * 2), height: Math.min(H, r.h + pad * 2) };
+  if (r.h < (mobile ? 60 : 64)) bad.push(`${TAG} hubie only ${r.h | 0} px tall`); log.push(`hubie ${name}: ${r.w | 0}x${r.h | 0} css px`);
+  await p.screenshot({ path: SHOT + 'hubie-' + name + '.png', clip }); }
 const click = (p, sel) => (mobile ? p.tap(sel) : p.click(sel));
 async function until(p, fn, what, ms = 25000) { const t0 = Date.now(); while (Date.now() - t0 < ms) { const s = await st(p); if (fn(s)) return s; await wait(60); } bad.push(`${TAG} FROZEN waiting for ${what}`); await p.screenshot({ path: SHOT + 'frozen.png' }); throw new Error('frozen ' + what); }
 async function layoutCheck(p, where) {
@@ -41,7 +47,7 @@ async function layoutCheck(p, where) {
     return o; });
   for (const x of out) bad.push(`${TAG} ${where}: ${x}`);
 }
-let expected = 1_000_000;
+let expected = 1_000_000; const midShots = new Set();
 async function setBet(p) { await p.fill('input[aria-label="Bet amount"]', '0.20'); await p.press('input[aria-label="Bet amount"]', 'Enter'); await wait(150); }
 async function fastOn(p) { await click(p, '.ic.snd'); await wait(150); await p.check('.pop input.fast'); await click(p, '.pop .txt'); await wait(100); }
 async function closeOverlays(p) { for (let i = 0; i < 40; i++) { if (await p.$('.celeb')) { await p.click('.celeb', { force: true, timeout: 2000 }).catch(() => {}); await wait(300); continue; } return; } }
@@ -57,6 +63,7 @@ async function playRound(p, level, k, trap, shotName) {
     await click(p, `.tile-btn:nth-child(${tile + 1})`);
     s = await until(p, x => !x.busy && (x.status !== 'live' || x.step === r + 1), 'pick');
     if (r === 0 && shotName && !isTrap) { await layoutCheck(p, 'in round'); await p.screenshot({ path: SHOT + shotName + '-climb.png' }); }
+    if (r === 3 && !isTrap && !midShots.has(level)) { midShots.add(level); await wait(500); await layoutCheck(p, 'mid climb'); await p.screenshot({ path: SHOT + level + '-midclimb.png' }); await hubieCrop(p, level + '-mid'); const a = await audio(p); log.push(`${level} row 4 music ${a.section} intensity ${a.intensity}`); }
   }
   if (!trap && s.status === 'live') { await wait(200); await click(p, '.panel .main'); }
   s = await until(p, x => x.status !== 'live' && !x.busy, 'round end');
@@ -76,7 +83,16 @@ async function playRound(p, level, k, trap, shotName) {
 
 // ---------- main session ----------
 const p = await open(`?debugseed=${SEED}`);
-await layoutCheck(p, 'idle'); await p.screenshot({ path: SHOT + 'idle.png' });
+await layoutCheck(p, 'idle'); await p.screenshot({ path: SHOT + 'idle.png' }); await hubieCrop(p, 'idle');
+{ const a0 = await audio(p); if (a0.state === 'running') bad.push(TAG + ' audio started before any gesture'); }
+await setBet(p);
+await click(p, '.panel .main'); await wait(50); await until(p, s => s.status === 'live' && !s.busy, 'first bet').catch(() => {});
+{ await wait(1500); const a = await audio(p); log.push('audio after first gesture: ' + JSON.stringify(a)); if (a.state !== 'running' || !a.playing) bad.push(TAG + ' audio not running after gesture ' + JSON.stringify(a)); if (!a.rain) bad.push(TAG + ' rain loop did not load'); }
+await hubieCrop(p, 'floor');
+{ const s0 = await st(p); const lay = layoutFor(s0.level, SEED, CLIENT, s0.nonce - 1); const t = lay[0].findIndex(x => !x); await click(p, `.tile-btn:nth-child(${t + 1})`); await until(p, x => !x.busy && x.step === 1, 'warm pick'); await wait(700); await hubieCrop(p, 'tile'); await p.screenshot({ path: SHOT + 'hubie-on-tile-full.png' });
+  await click(p, '.panel .main'); await until(p, x => x.status !== 'live' && !x.busy, 'warm cash'); expected += payoutCents(s0.bet, LEVELS[s0.level].mult100[1]) - s0.bet; await closeOverlays(p); }
+// mute toggle
+{ await click(p, '.ic.snd'); await wait(150); const box = await p.$('.pop input[type=checkbox]:not(.fast)'); if (box) { await box.click(); await wait(300); const a = await audio(p); if (a.gain > 0.01) bad.push(TAG + ' mute did not silence ' + a.gain); await box.click(); await wait(300); const b2 = await audio(p); if (b2.gain < 0.01) bad.push(TAG + ' unmute stayed silent'); log.push('mute toggle ok'); } else log.push('no mute checkbox found in sound pop'); await click(p, '.pop .txt'); await wait(100); }
 await setBet(p);
 if ((await st(p)).bet !== 20) bad.push(TAG + ' $0.20 chip did not set the bet');
 const plan = { easy: [[1, 0], [3, 0], [2, 1], [6, 0], [0, 1], [10, 0], [4, 1], [8, 0]], medium: [[1, 0], [2, 0], [0, 1], [4, 0], [3, 1], [6, 0], [1, 1], [8, 0]], hard: [[1, 0], [0, 1], [2, 0], [1, 1], [3, 0], [1, 0]], extreme: [[1, 0], [0, 1], [2, 0], [1, 0], [0, 1], [3, 0]] };
@@ -94,7 +110,7 @@ await click(p, '.lvl:has-text("Easy")'); await wait(150);
   await click(p, '.panel .main'); await until(p, s => s.status === 'live' && !s.busy, 'bet'); expected -= s0.bet;
   for (let r = 0; r < 12; r++) { const t = lay[r].findIndex(x => !x); await p.waitForSelector(`.tile-btn:nth-child(${t + 1}):not([disabled])`); await click(p, `.tile-btn:nth-child(${t + 1})`); await until(p, x => !x.busy && x.step === r + 1, 'pick'); }
   await click(p, '.panel .main'); await p.waitForSelector('.celeb', { timeout: 8000 }).catch(() => bad.push(TAG + ' no celebration at 30.30x'));
-  await wait(1900); await layoutCheck(p, 'real hat tip'); await p.screenshot({ path: SHOT + 'real-hat-tip.png' });
+  await wait(500); await hubieCrop(p, 'hat-tip'); await wait(1400); await layoutCheck(p, 'real hat tip'); await p.screenshot({ path: SHOT + 'real-hat-tip.png' });
   expected += payoutCents(s0.bet, LEVELS.easy.mult100[12]); await closeOverlays(p); const s = await st(p); if (s.balance !== expected) bad.push(`${TAG} balance after 30.30x ${s.balance} vs ${expected}`); }
 
 // ---------- auto play ----------

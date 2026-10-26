@@ -315,7 +315,7 @@ export class Scene {
   }
 
   // ---------- Hubie ----------
-  private hubieScale() { return (this.rowH * (this.w < 600 ? 0.98 : 0.92)) / 96; }
+  private hubieScale() { const n = this.level ? Math.max(...Array.from({ length: Math.min(3, this.level.rows) }, (_, r) => tilesOn(this.level, r))) : 3; return Math.min((this.rowH * (this.w < 600 ? 0.98 : 0.92)) / 96, (this.tileW(n) + 22) / 92); }
   private placeHubie() {
     const H = this.hubie; H.scale.set(this.hubieScale());
     const r = this.cleared - 1; H.x = r < 0 ? this.idleX() : this.tileX(r, Math.max(0, this.hubieTile)); H.y = this.feetY(r);
@@ -402,6 +402,8 @@ export class Scene {
       this.track(gsap.to(g, { x: x + Math.cos(a) * 70, y: y + Math.sin(a) * 70 + 20, alpha: 0, duration: 1.2, ease: 'power2.out', onComplete: () => g.destroy() })); }
   }
   hubieScreen() { const r = this.app.canvas.getBoundingClientRect(); return { x: r.left + this.hubie.x, y: r.top + this.world.y + this.hubie.y - this.rowH * 0.5 }; }
+  /** Screen box around Hubie, for test crops. */
+  hubieRect() { const c = this.app.canvas.getBoundingClientRect(); const b = this.hubie.getBounds(); return { x: c.left + b.x, y: c.top + b.y, w: b.width, h: b.height }; }
   tileScreen(r: number, i: number) { const c = this.app.canvas.getBoundingClientRect(); const t = this.tileRect(r, i); return { x: c.left + t.x + t.w / 2, y: c.top + t.y + t.h / 2 }; }
   reset(lv: Level) { this.setLevel(lv); }
   /** Reveal the whole layout at the end of a round, sweeping upward from row `from`. */

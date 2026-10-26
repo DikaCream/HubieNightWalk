@@ -306,6 +306,8 @@ let muted = localStorage.getItem('hnw-muted') === '1', volume = Number(localStor
 const LOOKAHEAD = 0.2;
 const rainUrl = import.meta.env.BASE_URL + 'audio/rain-loop.mp3';
 export const isMuted = () => muted;
+/** Debug snapshot for the playtest. */
+export const audioState = () => ({ state: ctx?.state ?? 'none', playing: !!eng?.playing, section: eng?.section ?? '', intensity: eng?.intensity ?? 0, rain: !!eng?.rainBuf, voices: eng?.voices ?? 0, gain: eng?.out.gain.value ?? 0 });
 export const getVolume = () => volume;
 function master() { return muted ? 0 : volume; }
 /** Must be called from a user gesture the first time. */
