@@ -1,5 +1,7 @@
-// Playwright playtest. Run with the preview server on :4190:  npx tsx scripts/playtest.mjs <width> <height> <tag>
-// Uses ?debugseed so the test knows every trap in advance and can choose safe tiles or traps on purpose.
+// Playwright playtest. Run with the Vite DEV server on :4190 (npx vite --port 4190 --host 127.0.0.1), then:
+//   npx tsx scripts/playtest.mjs <width> <height> <tag>
+// Uses ?debugseed so the test knows every trap in advance. That hook exists only under import.meta.env.DEV,
+// so it works on the dev server and is stripped from production builds (dist never contains it).
 import { chromium } from 'playwright';
 import { createHmac } from 'node:crypto';
 import { LEVELS, buildLayout, floatsNeeded, payoutCents } from '../src/engine.ts';

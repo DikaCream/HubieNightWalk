@@ -4,6 +4,19 @@ A climb and cash out game for Housebets. Hubie, the Housebets mascot, walks over
 
 Stack: Vite, React, TypeScript, PixiJS v8, GSAP, WebAudio. No wallet connect; the game runs on a $10,000 demo balance and is meant to be embedded in the Housebets casino.
 
+## Screenshots
+
+| | |
+|---|---|
+| ![Mobile idle](docs/screenshots/mobile-idle.webp) | ![Mobile mid climb](docs/screenshots/mobile-mid-climb.webp) |
+| ![Mobile hat tip win](docs/screenshots/mobile-hat-tip.webp) | ![Desktop](docs/screenshots/desktop.webp) |
+
+![Hubie pose sheet](docs/screenshots/hubie-sheet.webp)
+
+![Hubie next to the reference art](docs/screenshots/hubie-vs-reference.webp)
+
+The full screenshot set from the playtest lands in `shots/`, which is git ignored.
+
 ## Look
 
 Hubie is drawn in code, an original illustration of the Housebets mascot. The official art was studied for identity only (what he looks like), nothing was traced, cut out or copied: a chunky three toed sloth with a big round head, warm brown fur, a cream face mask, dark eye bands running from each eye toward the ear, half closed sleepy eyes and a gentle smile, a navy top hat with an orange band and a gold H buckle, a navy tailcoat with orange piping and tails, an orange waistcoat with gold buttons, a white shirt and an orange bow tie. For the night scene he has a cyan rim light on his left side from the billboard, a wet shine on the hat and fur, his collar turned up against the rain, and no scooter: he walks and hops on foot.
@@ -22,9 +35,9 @@ npm run dev            # local dev server
 npm run build          # type check and production build into dist/
 npx tsx scripts/sim.ts 2000000                     # math simulator, writes sim-result.txt
 npx tsx scripts/verify.ts <serverSeed> <clientSeed> <nonce> <level> [hash]
-npx vite preview --port 4190 --host 127.0.0.1      # then, in another shell:
-npx tsx scripts/playtest.mjs 390 844 m390          # Playwright playtest, screenshots in shots/
-node scripts/render-music.mjs                      # offline music render to audio/music-sample.wav
+npx vite --port 4190 --strictPort --host 127.0.0.1  # dev server (the playtest seed hook only exists here), then in another shell:
+npx tsx scripts/playtest.mjs 390 844 m390          # Playwright playtest, screenshots in shots/ (git ignored)
+node scripts/render-music.mjs                      # offline music render to audio/music-sample.wav (git ignored)
 ```
 
 ## Math
@@ -58,7 +71,7 @@ Every round has its own server seed. The game shows its SHA256 hash before you b
 * `src/fx.ts` pooled 2D particle canvas from the slot, with a smoke kind added
 * `src/App.tsx` React UI
 
-Debug query params, none of which touch balance or fairness: `?force=hat`, `?force=king`, `?force=night`, `?force=max` preview a celebration; `?musiccheck` exposes the offline music render. `?debugseed=x` fixes the server seed so the playtest knows the traps in advance; it is a test hook and the casino build should strip it.
+Debug query params, none of which touch balance or fairness: `?force=hat`, `?force=king`, `?force=night`, `?force=max` preview a celebration; `?musiccheck` exposes the offline music render. These previews are cosmetic only. `?debugseed=x` fixes the server seed so the playtest knows the traps in advance; it works only on the Vite dev server (guarded by `import.meta.env.DEV`) and is stripped from production builds, so the shipped game always uses a fresh random server seed. Run the playtest against `npx vite --port 4190`.
 
 ## Celebrations
 

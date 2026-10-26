@@ -12,7 +12,9 @@ export interface HistoryItem { id: number; level: LevelId; betCents: number; ste
 export interface AutoCfg { rounds: number; onWin: 'reset' | 'raise'; winPct: number; onLoss: 'reset' | 'raise'; lossPct: number; stopProfit: number; stopLoss: number }
 
 const q = new URLSearchParams(location.search);
-const DEBUG_SEED = q.get('debugseed');
+// Dev server only test hook: lets scripts/playtest.mjs fix the server seed. import.meta.env.DEV is false in
+// production builds, so the minifier drops this branch and the shipped game always rolls a random seed.
+const DEBUG_SEED = import.meta.env.DEV ? q.get('debugseed') : null;
 const START = 1_000_000; // $10,000.00 demo balance
 
 export class Game {
