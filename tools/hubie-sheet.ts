@@ -15,7 +15,7 @@ const cell = (s: string, label: string) => `<div class="c"><div class="i">${s}</
 const b64 = (p: string) => 'data:image/jpeg;base64,' + readFileSync(p).toString('base64');
 const R = '/workspace/refs/hubie/best/';
 const css = `body{margin:0;font:600 18px Arial;color:#ddd} .row{display:flex;gap:10px;padding:14px;flex-wrap:wrap} .c{text-align:center} .c p{margin:4px} .i svg,.i img{display:block}`;
-const sheet = `<style>${css} body{background:#3b4250}</style><div class="row">${poses.map(([n, p]) => cell(fullSvg(p, undefined, 260), n)).join('')}</div>
+const sheet = `<style>${css} body{background:#3b4250}</style><div class="row">${poses.map(([n, p]) => cell(fullSvg(p, [-56, -156, 56, 8], 270), n)).join('')}</div>
 <div class="row" style="background:#0d1217">${cell(fullSvg({}, undefined, 260), 'on the night scene')}${cell(fullSvg({}, [-34, -140, 34, -48], 260), 'bust (badge)')}${cell(fullSvg({}, [-30, -116, 30, -56], 160), 'head icon')}</div>`;
 const cmp = `<style>${css} body{background:#2a2f38}</style><div class="row">${cell(`<img src="${b64(R + 'x-hubie-avatar.jpg')}" height="420">`, 'official avatar (reference)')}${cell(fullSvg({}, [-34, -140, 34, -48], 420 * 68 / 92), 'drawn bust')}
 ${cell(`<img src="${b64(R + 'x-hubie-post-HVaMvNmWoAEDzFs.jpg')}" height="420">`, 'official full body (reference)')}${cell(fullSvg({}, undefined, 420 * 96 / 148), 'drawn in code')}</div>`;
