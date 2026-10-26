@@ -84,7 +84,7 @@ export class Scene {
   tileX(r: number, i: number) { const n = tilesOn(this.level, r); const tw = this.tileW(n); return this.cx + (i - (n - 1) / 2) * (tw + 9); }
   private tileCY(r: number) { return this.rowY(r) - this.tileH(tilesOn(this.level, r)) / 2 - 6; }
   private feetY(r: number) { return r < 0 ? this.rowY(-1) - this.rowH * 0.1 : this.tileCY(r) + this.tileH(tilesOn(this.level, r)) * 0.12; }
-  private camFor(cleared: number) { return this.h * (cleared === 0 ? 0.8 : 0.72) - this.feetY(cleared - 1); }
+  private camFor(cleared: number) { return this.h * (cleared === 0 ? (this.w < 600 ? 0.85 : 0.8) : (this.w < 600 ? 0.76 : 0.72)) - this.feetY(cleared - 1); }
   private idleX() { return this.cx - Math.min(this.pw * 0.32, 110); }
   /** Screen rectangle of a tile (CSS pixels relative to the canvas). */
   tileRect(r: number, i: number) { const n = tilesOn(this.level, r); const tw = this.tileW(n), th = this.tileH(n); return { x: this.tileX(r, i) - tw / 2, y: this.camY + this.tileCY(r) - th / 2, w: tw, h: th }; }
@@ -325,6 +325,11 @@ export class Scene {
   walkIn(): Promise<void> {
     const H = this.hubie; H.x = -40; H.y = this.feetY(-1); H.mode = 'walk'; H.scale.x = this.hubieScale();
     return new Promise(res => this.track(gsap.to(H, { x: this.idleX(), duration: this.d(1.1), ease: 'none', onComplete: () => { H.mode = 'idle'; res(); } })));
+  }
+  /** After a fall Hubie walks back onto the rooftop floor while the revealed board stays. */
+  respawn() {
+    const H = this.hubie; this.cleared = 0; this.hubieTile = -1; H.alpha = 1; H.rotation = 0; H.scale.set(this.hubieScale()); H.hat.position.set(1, -70); H.hat.rotation = -0.1;
+    this.panTo(0); void this.walkIn();
   }
   /** At the bet Hubie strolls to the middle of the floor, under the first row. */
   walkToStart(): Promise<void> {

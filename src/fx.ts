@@ -35,7 +35,7 @@ export class FX {
     const { ctx, w, h, d } = this;
     if (this.ambient && Math.random() < .25) this.add({ x: Math.random() * w, y: h + 10, vx: (Math.random() - .5) * .4, vy: -(.4 + Math.random() * 1.1) * d, max: 500, kind: this.heat ? 'ember' : 'dust', r: (1 + Math.random() * 2) * d, g: 0 });
     const sh = MOBILE ? this.shower * .6 : this.shower;
-    for (let i = 0; i < sh; i++) if (Math.random() < .25) this.add({ x: Math.random() * w, y: -20 - Math.random() * 60, vx: (Math.random() - .5) * 2, vy: (5 + Math.random() * 6) * d, max: 220, kind: Math.random() < .8 ? 'coin' : 'bill', r: (5 + Math.random() * 6) * d, g: .12 * d });
+    for (let i = 0; i < sh; i++) if (Math.random() < .25) this.add({ x: Math.random() * w, y: -20 - Math.random() * 60, vx: (Math.random() - .5) * 2, vy: (5 + Math.random() * 6) * d, max: 220, kind: 'coin', r: (5 + Math.random() * 6) * d, g: .12 * d });
     if (!this.ps.length) { if (this.dirty) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, w, h); this.dirty = false; } return; }
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.clearRect(0, 0, w, h); this.dirty = true;
     const ps = this.ps;

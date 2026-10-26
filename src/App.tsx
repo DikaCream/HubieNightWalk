@@ -76,9 +76,10 @@ export default function App() {
     unlock(); if (!game.canBet()) { if (game.betCents > game.balance) flash('Not enough demo balance for that bet', 'lose'); return false; }
     setToast(null);
     const ok = await game.bet(); if (!ok) return false;
-    sfx.sfxBet(); const sc = scene.current!; sc.fast = game.fast; const fromIdle = sc.cleared === 0 && sc.hubie.alpha === 1;
-    if (!fromIdle) { sc.reset(LEVELS[game.round!.level]); await sc.walkIn(); } else sc.reset(LEVELS[game.round!.level]);
-    game.busy = true; game.emit(); await sc.walkToStart(); game.busy = false;
+    sfx.sfxBet(); const sc = scene.current!; sc.fast = game.fast; const fromIdle = sc.cleared === 0 && sc.hubie.alpha === 1 && sc.hubie.mode !== 'fall';
+    game.busy = true; game.emit(); sc.reset(LEVELS[game.round!.level]);
+    if (!fromIdle) await sc.walkIn();
+    await sc.walkToStart(); game.busy = false;
     sc.setActiveRow(0); setIntensity(1); game.emit();
     return true;
   }
@@ -94,7 +95,9 @@ export default function App() {
       fx.current?.burst(10, p.x, p.y, ['spark', 'ember'], 0.6);
       sfx.stingTrap(); setIntensity(0); stage(); await sc.tumble(); sc.reveal(g.layout, row);
       flash(isSummit(LEVELS[g.level], row) ? 'Missed the summit jump' : `Hatch cracked on row ${row + 1}`, 'lose');
-      game.busy = false; game.emit(); return;
+      game.busy = false; game.emit();
+      if (!game.autoRunning) void wait(900).then(() => { if (!game.inRound && !game.busy && scene.current?.hubie.alpha === 0) scene.current.respawn(); });
+      return;
     }
     sc.flipChip(row, i); sfx.sfxChip(row); sc.setMultTag(fmtMult(LEVELS[g.level].mult100[g.step] / 100));
     if (out === 'max') { sc.reveal(g.layout, row); game.busy = false; await celebrate(LEVELS[g.level].mult100[g.step] / 100, g.payoutCents); return; }

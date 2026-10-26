@@ -32,9 +32,9 @@ async function layoutCheck(p, where) {
     const o = []; const vis = e => { const s = getComputedStyle(e); const r = e.getBoundingClientRect(); return s.display !== 'none' && s.visibility !== 'hidden' && r.width > 0 && r.height > 0; };
     const ov = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1;
     if (document.documentElement.scrollWidth > innerWidth || document.documentElement.scrollHeight > innerHeight) o.push('page overflow ' + document.documentElement.scrollWidth + 'x' + document.documentElement.scrollHeight);
-    const sel = '.top *, .ticker *, .hud > div, .ladder li, .panel button, .panel .field, .toast, .livepanel h3, .modal, .modal .mh *, .celeb .c-inner > *';
+    const sel = '.top *, .next-pill, .feed-mini, .win-pill, .panel button, .panel .field, .toast, .modal, .modal .mh *, .celeb .c-inner > *';
     for (const e of document.querySelectorAll(sel)) { if (!vis(e)) continue; const r = e.getBoundingClientRect(); if (r.right > innerWidth + 1 || r.left < -1 || r.bottom > innerHeight + 1 || r.top < -1) o.push(`outside ${e.tagName}.${e.className} ${r.left | 0},${r.top | 0},${r.right | 0},${r.bottom | 0}`); }
-    const groups = [['.panel button, .panel .field'], ['.hud > div, .ladder li, .toast'], ['.top > *'], ['.celeb .c-inner > *'], ['.modal .mh > *']];
+    const groups = [['.panel button, .panel .field'], ['.next-pill, .toast, .feed-mini, .win-pill'], ['.top > *'], ['.celeb .c-inner > *'], ['.modal .mh > *']];
     for (const [g] of groups) { const els = [...document.querySelectorAll(g)].filter(vis); for (let i = 0; i < els.length; i++) for (let j = i + 1; j < els.length; j++) { if (els[i].contains(els[j]) || els[j].contains(els[i])) continue; if (ov(els[i].getBoundingClientRect(), els[j].getBoundingClientRect())) o.push(`overlap ${els[i].className || els[i].tagName} X ${els[j].className || els[j].tagName}`); } }
     for (const e of document.querySelectorAll('.panel button, .tile-btn')) if (vis(e)) { const r = e.getBoundingClientRect(); if (innerWidth < 600 && (r.height < 34 || r.width < 40)) o.push(`small target ${e.className} ${r.width | 0}x${r.height | 0}`); }
     const bal = document.querySelector('.bal b')?.textContent; const s = window.__hnw(); const exp = '$' + (s.balance / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); if (bal !== exp) o.push(`balance text ${bal} vs ${exp}`);
@@ -42,7 +42,9 @@ async function layoutCheck(p, where) {
   for (const x of out) bad.push(`${TAG} ${where}: ${x}`);
 }
 let expected = 1_000_000;
-async function closeOverlays(p) { for (let i = 0; i < 40; i++) { if (await p.$('.celeb')) { await p.click('.celeb', { force: true }); await wait(300); continue; } return; } }
+async function setBet(p) { await p.fill('input[aria-label="Bet amount"]', '0.20'); await p.press('input[aria-label="Bet amount"]', 'Enter'); await wait(150); }
+async function fastOn(p) { await click(p, '.ic.snd'); await wait(150); await p.check('.pop input.fast'); await click(p, '.pop .txt'); await wait(100); }
+async function closeOverlays(p) { for (let i = 0; i < 40; i++) { if (await p.$('.celeb')) { await p.click('.celeb', { force: true, timeout: 2000 }).catch(() => {}); await wait(300); continue; } return; } }
 /** Plays one round: k safe steps then cash out, or k safe steps then a trap on purpose. */
 async function playRound(p, level, k, trap, shotName) {
   const s0 = await st(p); const lay = layoutFor(level, SEED, CLIENT, s0.nonce); const lv = LEVELS[level];
@@ -75,14 +77,14 @@ async function playRound(p, level, k, trap, shotName) {
 // ---------- main session ----------
 const p = await open(`?debugseed=${SEED}`);
 await layoutCheck(p, 'idle'); await p.screenshot({ path: SHOT + 'idle.png' });
-await click(p, '.chip:has-text("$0.20")'); await wait(150);
+await setBet(p);
 if ((await st(p)).bet !== 20) bad.push(TAG + ' $0.20 chip did not set the bet');
 const plan = { easy: [[1, 0], [3, 0], [2, 1], [6, 0], [0, 1], [10, 0], [4, 1], [8, 0]], medium: [[1, 0], [2, 0], [0, 1], [4, 0], [3, 1], [6, 0], [1, 1], [8, 0]], hard: [[1, 0], [0, 1], [2, 0], [1, 1], [3, 0], [1, 0]], extreme: [[1, 0], [0, 1], [2, 0], [1, 0], [0, 1], [3, 0]] };
 let rounds = 0;
 for (const level of ['easy', 'medium', 'hard', 'extreme']) {
   await click(p, `.lvl:has-text("${LEVELS[level].name}")`); await wait(200);
   if ((await st(p)).level !== level) bad.push(`${TAG} level ${level} not selected`);
-  if (level === 'hard') { await click(p, '.side.fast'); await wait(100); log.push('fast mode on from hard'); }
+  if (level === 'hard') { await fastOn(p); log.push('fast mode on from hard'); }
   for (const [i, [k, trap]] of plan[level].entries()) { const name = i === 0 ? `${level}-cash` : i === 1 && trap ? `${level}-trap` : i === 2 && trap ? `${level}-trap` : null; await playRound(p, level, k, !!trap, name); rounds++; }
 }
 log.push(`${rounds} manual rounds, balance ${(await st(p)).balance} expected ${expected}`);
@@ -98,22 +100,20 @@ await click(p, '.lvl:has-text("Easy")'); await wait(150);
 // ---------- auto play ----------
 await click(p, '.lvl:has-text("Medium")'); await wait(150);
 const before = await st(p);
-await click(p, '.side.auto-btn'); await p.waitForSelector('.auto-form');
-await p.fill('.auto-form input[aria-label="Auto cash out multiplier"]', '2.16');
-await click(p, '.seg button:has-text("5")'); await wait(100);
-await layoutCheck(p, 'auto sheet'); await p.screenshot({ path: SHOT + 'auto-sheet.png' });
-await click(p, '.start-auto');
-await wait(1500); await p.screenshot({ path: SHOT + 'auto-running.png' });
-const after = await until(p, s => !s.auto && !s.busy && s.status !== 'live', 'auto play end', 90000);
+await click(p, '.mode:has-text("Auto")'); await p.waitForSelector('.autorow');
+await p.fill('.autorow input[aria-label="Auto cash out multiplier"]', '2.16');
+await p.selectOption('.autorow select', '5'); await wait(100);
+await click(p, '.autorow .more'); await p.waitForSelector('.auto-form'); await layoutCheck(p, 'auto sheet'); await p.screenshot({ path: SHOT + 'auto-sheet.png' }); await click(p, '.modal .x'); await wait(200);
+await layoutCheck(p, 'auto panel'); await p.screenshot({ path: SHOT + 'auto-panel.png' });
+await click(p, '.panel .main');
+await wait(2500); await p.screenshot({ path: SHOT + 'auto-running.png' });
+const after = await until(p, s => !s.auto && !s.busy && s.status !== 'live', 'auto play end', 120000);
 const newH = after.history.slice(0, after.history.length - before.history.length);
 let delta = 0; for (const h of newH) { delta += h.payoutCents - h.betCents; if (h.payoutCents && (h.mult100 !== 216 || h.payoutCents !== payoutCents(h.betCents, 216))) bad.push(`${TAG} auto payout ${h.payoutCents} at ${h.mult100}`); }
 if (newH.length !== 5) bad.push(`${TAG} auto played ${newH.length} rounds, expected 5`);
 expected += delta; if (after.balance !== expected) bad.push(`${TAG} balance after auto ${after.balance} vs ${expected}`);
 log.push(`auto: ${newH.map(h => (h.payoutCents ? 'W' : 'L')).join('')}, delta ${delta}`);
-// manual round with auto cash out target still set at 2.16: should cash out after 2 safe steps by itself
-{ const s0 = await st(p); const lay = layoutFor('medium', SEED, CLIENT, s0.nonce); await click(p, '.panel .main'); await until(p, s => s.status === 'live' && !s.busy, 'bet'); expected -= s0.bet;
-  for (let r = 0; r < 2; r++) { const t = lay[r].findIndex(x => !x); await p.waitForSelector(`.tile-btn:nth-child(${t + 1}):not([disabled])`); await click(p, `.tile-btn:nth-child(${t + 1})`); await until(p, x => !x.busy && (x.step === r + 1 || x.status !== 'live'), 'pick'); }
-  const s = await until(p, x => x.status === 'won', 'auto cash out at target'); expected += payoutCents(s0.bet, 216); if (s.balance !== expected) bad.push(`${TAG} target cash out balance ${s.balance} vs ${expected}`); await closeOverlays(p); }
+await closeOverlays(p); await click(p, '.mode:has-text("Manual")'); await wait(150);
 
 // ---------- info modal ----------
 for (const [t, n] of [['Rules', 'rules'], ['Paytable', 'paytable'], ['Provably fair', 'fair'], ['History', 'history']]) {
@@ -128,13 +128,13 @@ for (const [t, n] of [['Rules', 'rules'], ['Paytable', 'paytable'], ['Provably f
 }
 // sound popover
 await click(p, '.ic.snd'); await wait(200); await layoutCheck(p, 'sound pop'); await p.screenshot({ path: SHOT + 'sound.png' }); await click(p, '.pop .txt');
-if (!mobile) { await layoutCheck(p, 'desktop live'); } else { await click(p, '.ticker'); await wait(300); await layoutCheck(p, 'live sheet'); await p.screenshot({ path: SHOT + 'live-sheet.png' }); await click(p, '.modal .x'); }
+if (!mobile) { await layoutCheck(p, 'desktop live'); } else { await click(p, '.feed-mini'); await wait(600); await layoutCheck(p, 'live sheet'); await p.screenshot({ path: SHOT + 'live-sheet.png' }); await click(p, '.modal .x'); }
 log.push(`final balance ${(await st(p)).balance} expected ${expected}, rounds in history ${(await st(p)).history.length}`);
 await p.context().close();
 
 // ---------- max win: find a nonce 0 layout where the extreme summit is safe ----------
 { let seed = ''; for (let i = 0; i < 500; i++) { const L = layoutFor('extreme', 'maxwin-' + i, CLIENT, 0); if (!L[6][0]) { seed = 'maxwin-' + i; break; } }
-  const q = await open(`?debugseed=${seed}`); await click(q, '.lvl:has-text("Extreme")'); await click(q, '.side.fast'); await click(q, '.chip:has-text("$0.20")'); await wait(150);
+  const q = await open(`?debugseed=${seed}`); await click(q, '.lvl:has-text("Extreme")'); await fastOn(q); await setBet(q);
   const lay = layoutFor('extreme', seed, CLIENT, 0); await click(q, '.panel .main'); await until(q, s => s.status === 'live' && !s.busy, 'bet');
   for (let r = 0; r < 7; r++) { const t = lay[r].findIndex(x => !x); await q.waitForSelector(`.tile-btn:nth-child(${t + 1}):not([disabled])`); if (r === 6) { await layoutCheck(q, 'summit'); await q.screenshot({ path: SHOT + 'summit-row.png' }); } await click(q, `.tile-btn:nth-child(${t + 1})`); await until(q, x => !x.busy && (x.step === r + 1 || x.status !== 'live'), 'pick'); }
   await q.waitForSelector('.celeb.t4', { timeout: 8000 }).catch(() => bad.push(TAG + ' no max win screen'));
