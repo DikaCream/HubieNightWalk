@@ -192,3 +192,6 @@ tr.cap td { color: var(--gold); font-weight: 800; }
   .ov { align-items: center; } .modal { border-radius: 18px; max-height: 84vh; }
   .brand b { font-size: 17px; }
 }
+@media (max-width: 400px) { .modal .mh .tabs { gap: 2px; } .modal .mh .tabs button { padding: 7px 6px; font-size: 12.5px; } }
+@media (max-width: 420px) { .brand span { display: none; } .brand b { white-space: normal; line-height: 1.05; font-size: 13px; } .ic { width: 38px; height: 38px; } .bal { padding: 3px 8px; } }
+@media (min-width: 960px) { .livepanel .feed { margin-bottom: 10px; -webkit-mask-image: linear-gradient(#000 85%, transparent); mask-image: linear-gradient(#000 85%, transparent); } }
