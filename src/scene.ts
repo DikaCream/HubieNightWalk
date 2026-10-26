@@ -6,7 +6,7 @@
 import { Application, BlurFilter, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
 import gsap from 'gsap';
 import { isSummit, multAt, tilesOn, type Level } from './engine';
-import { Hubie } from './hubie';
+import { Hubie, loadHubieArt } from './hubie';
 
 export type TileState = 'idle' | 'active' | 'safe' | 'safePicked' | 'trap' | 'trapPicked' | 'dim';
 const CYAN = 0x02f7fd, GOLD = 0xf3b63f, BG = 0x0d1217;
@@ -59,7 +59,7 @@ export class Scene {
     this.neonGlow = new Sprite(this.glow); this.neonGlow.anchor.set(0.5); this.neonGlow.tint = CYAN;
     this.neon = new Text({ text: 'HOUSEBETS', style: { fontFamily: FONT, fontWeight: '900', fontSize: 20, fill: 0xb8feff, letterSpacing: 2, dropShadow: { color: CYAN, blur: 8, distance: 0, alpha: 0.9, angle: 0 } } });
     this.neon.anchor.set(0.5);
-    this.hubie = new Hubie();
+    await loadHubieArt(); this.hubie = new Hubie();
     this.tagTxt = new Text({ text: '', style: { fontFamily: FONT, fontWeight: '900', fontSize: 12, fill: 0xeafcff } }); this.tagTxt.anchor.set(0.5);
     this.tag.addChild(this.tagBg, this.tagTxt); this.tag.visible = false;
     this.world.addChild(this.wall, this.rowsLayer, this.hubieShadow, this.hubie, this.tag);
@@ -75,7 +75,7 @@ export class Scene {
     return t;
   }
   private d(s: number) { return this.fast ? s * 0.45 : s; }
-  killAll() { for (const t of this.tweens) t.kill(); this.tweens.length = 0; if (this.hubie) gsap.killTweensOf([this.hubie, this.hubie.scale, this.hubie.hat, this.hubie.armR, this.hubie.armL, this.world]); }
+  killAll() { for (const t of this.tweens) t.kill(); this.tweens.length = 0; if (this.hubie) gsap.killTweensOf([this.hubie, this.hubie.scale, this.hubie.hat, this.hubie.armR, this.hubie.rig, this.hubie.rig.scale, this.world]); }
 
   // ---------- geometry ----------
   private rowY(r: number) { return -r * this.rowH; } // baseline (front edge) of roof tier r; tier -1 is the rooftop floor
@@ -187,7 +187,7 @@ export class Scene {
     this.killAll(); this.level = lv; this.cleared = 0; this.hubieTile = -1;
     this.states = Array.from({ length: lv.rows }, (_, r) => new Array(tilesOn(lv, r)).fill('idle'));
     this.tag.visible = false; this.hubie.alpha = 1; this.hubie.rotation = 0; this.hubie.mode = 'idle';
-    this.hubie.hat.position.set(1, -70); this.hubie.hat.rotation = -0.1;
+    this.hubie.resetHat(); this.hubie.rig.rotation = 0;
     this.layout();
   }
   private buildRows() {
@@ -290,7 +290,7 @@ export class Scene {
   /** Pointer hover and press feedback from the DOM tile buttons. */
   hover(i: number, on: boolean) { const t = this.R(this.cleared)?.tiles[i]; if (!t || this.states[this.cleared][i] !== 'active') return; gsap.to(t.c, { y: this.tileCY(this.cleared) - (on ? 3 : 0), duration: 0.12 }); gsap.to(t.c.scale, { x: on ? 1.04 : 1, y: on ? 1.04 : 1, duration: 0.12 }); }
   press(i: number) { const t = this.R(this.cleared)?.tiles[i]; if (!t) return; gsap.fromTo(t.c.scale, { x: 0.93, y: 0.9 }, { x: 1, y: 1, duration: 0.3, ease: 'back.out(3)' }); }
-  /** Safe step: the hatch flips over into a gold chip, then glowing paw prints appear. */
+  /** Safe step: the hatch flips over into a gold chip, then the hover scooter leaves a warm glow trail. */
   flipChip(r: number, i: number) {
     const t = this.R(r)?.tiles[i]; if (!t) return; t.c.y = this.tileCY(r);
     const tl = gsap.timeline();
@@ -298,7 +298,8 @@ export class Scene {
       .to(t.c.scale, { y: 1, x: 1, duration: this.d(0.45), ease: 'elastic.out(1, 0.45)' });
     this.track(tl);
     const p = t.prints.clear(); const s = Math.max(0.7, t.h / 50);
-    for (const [x, y, k] of [[-t.w * 0.18, t.h * 0.12, 0], [t.w * 0.18, t.h * 0.06, 1]]) { p.ellipse(x, y, 4.5 * s, 3.2 * s).fill({ color: CYAN, alpha: 0.9 }); for (let d = -1; d <= 1; d++) p.circle(x + d * 3.2 * s, y - 4.2 * s - (d === 0 ? 0.8 : 0) * s, 1.4 * s).fill({ color: CYAN, alpha: 0.9 }); void k; }
+    p.ellipse(0, t.h * 0.18, t.w * 0.36, 4 * s).fill({ color: 0xff9a3c, alpha: 0.35 }).ellipse(0, t.h * 0.18, t.w * 0.22, 2.2 * s).fill({ color: 0xffd08a, alpha: 0.7 });
+    for (const x of [-0.24, 0.2]) p.circle(t.w * x, t.h * 0.2, 2.4 * s).fill({ color: 0xffe2a8, alpha: 0.85 });
     p.alpha = 0; this.track(gsap.to(p, { alpha: 0.85, duration: 0.3, delay: this.d(0.35) }));
     this.cleared = r + 1; this.hubieTile = i;
   }
@@ -314,13 +315,13 @@ export class Scene {
   }
 
   // ---------- Hubie ----------
-  private hubieScale() { return (this.rowH * 0.86) / 96; }
+  private hubieScale() { return (this.rowH * (this.w < 600 ? 0.98 : 0.92)) / 96; }
   private placeHubie() {
     const H = this.hubie; H.scale.set(this.hubieScale());
     const r = this.cleared - 1; H.x = r < 0 ? this.idleX() : this.tileX(r, Math.max(0, this.hubieTile)); H.y = this.feetY(r);
     this.drawShadow();
   }
-  private drawShadow() { const s = this.hubieScale(); this.hubieShadow.clear().ellipse(0, 0, 17 * s, 4 * s).fill({ color: 0x000000, alpha: 0.45 }); }
+  private drawShadow() { const s = this.hubieScale(); this.hubieShadow.clear().ellipse(4 * s, 0, 34 * s, 5 * s).fill({ color: 0x000000, alpha: 0.45 }); }
   /** Hubie walks in from the left edge to his start spot. */
   walkIn(): Promise<void> {
     const H = this.hubie; H.x = -40; H.y = this.feetY(-1); H.mode = 'walk'; H.scale.x = this.hubieScale();
@@ -328,7 +329,7 @@ export class Scene {
   }
   /** After a fall Hubie walks back onto the rooftop floor while the revealed board stays. */
   respawn() {
-    const H = this.hubie; this.cleared = 0; this.hubieTile = -1; H.alpha = 1; H.rotation = 0; H.scale.set(this.hubieScale()); H.hat.position.set(1, -70); H.hat.rotation = -0.1;
+    const H = this.hubie; this.cleared = 0; this.hubieTile = -1; H.alpha = 1; H.rotation = 0; H.scale.set(this.hubieScale()); H.resetHat(); H.rig.rotation = 0;
     this.panTo(0); void this.walkIn();
   }
   /** At the bet Hubie strolls to the middle of the floor, under the first row. */
@@ -343,13 +344,12 @@ export class Scene {
       const x1 = this.tileX(r, i), y1 = this.feetY(r); const peak = this.rowH * 0.75;
       const p = { t: 0 }; const tl = gsap.timeline({ onComplete: () => { H.mode = 'idle'; res(); } });
       tl.to(H.scale, { x: b * 1.15, y: b * 0.8, duration: this.d(0.11), ease: 'power2.out' })
-        .to([H.armL], { rotation: 2.7, duration: this.d(0.15) }, '<').to([H.armR], { rotation: -2.7, duration: this.d(0.15) }, '<')
+        .to(H.armR, { rotation: -0.45, duration: this.d(0.15) }, '<').to(H.rig, { rotation: -0.12, duration: this.d(0.15) }, '<')
         .to(p, { t: 1, duration: this.d(0.42), ease: 'none', onUpdate: () => { const t = p.t; H.x = x0 + (x1 - x0) * t; H.y = y0 + (y1 - y0) * t - Math.sin(Math.PI * t) * peak; } }, '>')
         .to(H.scale, { x: b * 0.9, y: b * 1.12, duration: this.d(0.18), ease: 'power1.out' }, '<')
-        .to(H.legL, { rotation: 0.5, duration: this.d(0.2) }, '<').to(H.legR, { rotation: -0.5, duration: this.d(0.2) }, '<')
+        .to(H.rig, { rotation: 0.1, duration: this.d(0.3) }, '<').to(H.hat, { y: H.hat.y - 4, duration: this.d(0.2), yoyo: true, repeat: 1 }, '<')
         .to(H.scale, { x: b * 1.2, y: b * 0.78, duration: this.d(0.08), ease: 'power2.out' }, '>')
-        .to([H.legL, H.legR], { rotation: 0, duration: this.d(0.1) }, '<')
-        .to(H.armL, { rotation: 0.28, duration: this.d(0.3) }, '<').to(H.armR, { rotation: -0.28, duration: this.d(0.3) }, '<')
+        .to(H.rig, { rotation: 0, duration: this.d(0.2) }, '<').to(H.armR, { rotation: 0, duration: this.d(0.3) }, '<')
         .to(H.scale, { x: b, y: b, duration: this.d(0.35), ease: 'elastic.out(1, 0.45)' }, '<');
       this.track(tl);
     });
@@ -368,8 +368,9 @@ export class Scene {
       const H = this.hubie; H.mode = 'fall'; this.tag.visible = false;
       const tl = gsap.timeline({ onComplete: () => res() });
       tl.to(H, { y: H.y - this.rowH * 0.45, duration: this.d(0.28), ease: 'power2.out' })
-        .to(H, { rotation: (Math.random() < 0.5 ? -1 : 1) * 0.6, duration: this.d(0.2) }, '<')
-        .to(H.hat, { y: -120, rotation: 1.2, duration: this.d(0.5), ease: 'power1.out' }, '<')
+        .to(H, { rotation: (Math.random() < 0.5 ? -1 : 1) * 0.8, duration: this.d(0.2) }, '<')
+        .to(H.hat, { y: H.hat.y - 45, x: H.hat.x + 18, rotation: 1.4, duration: this.d(0.5), ease: 'power1.out' }, '<')
+        .to(H, { rotation: '+=' + ((Math.random() < 0.5 ? -1 : 1) * 3.2), duration: this.d(0.9), ease: 'power1.in' }, '>-0.1')
         .to(H, { y: H.y + this.rowH * 1.6, duration: this.d(0.7), ease: 'power2.in' }, '>0.15')
         .to(H.scale, { x: this.hubieScale() * 0.6, y: this.hubieScale() * 0.6, duration: this.d(0.7) }, '<')
         .to(H, { alpha: 0, duration: this.d(0.3) }, '>-0.3');
@@ -378,15 +379,14 @@ export class Scene {
   }
   /** Win: tier 0 small hop, 1 hat tip, 2 spotlight, 3 city lights up, 4 fireworks too. */
   celebrate(tier = 0) {
-    const H = this.hubie, b = this.hubieScale(); H.mode = 'win'; gsap.killTweensOf([H.hat, H.armR, H.armL]);
+    const H = this.hubie, b = this.hubieScale(); H.mode = 'win'; gsap.killTweensOf([H.hat, H.armR]); const hx = H.hat.x, hy = H.hat.y;
     const tl = gsap.timeline({ onComplete: () => { H.mode = 'idle'; } });
     tl.to(H, { y: H.y - this.rowH * 0.3, duration: 0.18, yoyo: true, repeat: 1, ease: 'power2.out' })
-      .to(H.armR, { rotation: -2.9, duration: 0.25 }, '<')
-      .to(H.hat, { y: -84, x: 8, rotation: 0.35, duration: 0.25, ease: 'back.out(2)' }, '<0.1')
-      .to(H.hat, { y: -70, x: 1, rotation: -0.1, duration: 0.3, delay: 0.5 })
-      .to(H.armR, { rotation: -0.28, duration: 0.3 }, '<');
+      .to(H.hat, { y: hy - 18, x: hx - 6, rotation: -0.4, duration: 0.25, ease: 'back.out(2)' }, '<0.1')
+      .to(H.hat, { y: hy, x: hx, rotation: 0, duration: 0.3, delay: 0.6 })
+      .to(H.armR, { rotation: 0, duration: 0.3 }, '<');
     if (tier >= 1) tl.to(H.scale, { x: b * 1.12, y: b * 0.9, duration: 0.12, yoyo: true, repeat: 3 }, 0.2);
-    if (tier >= 2) tl.to(H.armL, { rotation: 2.9, duration: 0.25, yoyo: true, repeat: 3 }, 0.2);
+    if (tier >= 2) tl.to(H.rig, { rotation: 0.12, duration: 0.25, yoyo: true, repeat: 3, ease: 'sine.inOut' }, 0.2);
     this.track(tl);
     if (tier >= 2) this.spotlight(tier >= 3 ? 6 : 3);
     if (tier >= 3) { this.cityBoost = 1; this.track(gsap.to(this, { cityBoost: 0, duration: 7, ease: 'power1.in' })); }
@@ -442,8 +442,8 @@ export class Scene {
   get camSettled() { return Math.abs(this.world.y - this.camY) < 0.5; }
   /** Renders a standalone Hubie to a data URL, used for the header badge, intro and celebrations. */
   async portrait(pose: 'idle' | 'win' = 'idle') {
-    const hb = new Hubie(); if (pose === 'win') { hb.armR.rotation = -2.9; hb.armL.rotation = 2.6; hb.hat.position.set(8, -86); hb.hat.rotation = 0.35; }
-    hb.scale.set(3); hb.position.set(80, 300); const c = new Container(); c.addChild(hb);
+    const hb = new Hubie(); hb.glow.visible = false; hb.rig.y = 0; if (pose === 'win') { hb.armR.rotation = -0.4; hb.hat.y -= 16; hb.hat.x -= 6; hb.hat.rotation = -0.4; }
+    hb.scale.set(3); hb.position.set(150, 340); const c = new Container(); c.addChild(hb);
     const url = await this.app.renderer.extract.base64({ target: c, resolution: 1 }); c.destroy({ children: true }); return url;
   }
 }

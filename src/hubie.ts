@@ -1,66 +1,67 @@
-// Hubie, the top hat sloth, drawn with Pixi vector shapes so he matches the rooftop scene.
-// Local units: feet at y = 0, about 96 units tall with the hat. Parts are separate so they can animate.
-import { Container, Graphics } from 'pixi.js';
+// Hubie, the official Housebets mascot: the top hat sloth on his orange hover scooter.
+// Built from the official art, cut into three layers (body with scooter, top hat, paper hand) so the
+// hat can lift off and the paper hand can wave. Local units: scooter wheels at y = 0, about 96 units tall.
+import { Assets, Container, Graphics, Sprite, Texture } from 'pixi.js';
+import bodyUrl from './art/hubie-body.webp';
+import hatUrl from './art/hubie-hat.webp';
+import handUrl from './art/hubie-hand.webp';
+import meta from './art/hubie-parts.json';
 
-const FUR = 0x86765f, FUR_D = 0x6c5d4a, BELLY = 0xb19f82, MASK = 0xdcc9a7, PATCH = 0x3a2c22, INK = 0x221a15, CLAW = 0xe6dcc4;
 export type Mode = 'idle' | 'walk' | 'air' | 'win' | 'fall';
+const K = 96 / meta.H; // art pixels to local units
+const px = (x: number) => (x - meta.W / 2) * K, py = (y: number) => (y - meta.H) * K;
+let tex: { body: Texture; hat: Texture; hand: Texture } | null = null;
+export async function loadHubieArt() {
+  if (tex) return;
+  const [body, hat, hand] = await Promise.all([Assets.load<Texture>(bodyUrl), Assets.load<Texture>(hatUrl), Assets.load<Texture>(handUrl)]);
+  tex = { body, hat, hand };
+}
+/** Rest position of the hat (its brim centre) in local units. */
+export const HAT = { x: px(meta.hat.x + meta.hat.w / 2), y: py(meta.hat.y + meta.hat.h) };
+const WRIST = { x: px(meta.wrist[0]), y: py(meta.wrist[1]) };
 
 export class Hubie extends Container {
-  legL = new Graphics(); legR = new Graphics(); armL = new Graphics(); armR = new Graphics();
-  body = new Graphics(); head = new Container(); eyes = new Graphics(); hat = new Container();
-  mode: Mode = 'idle'; phase = 0; private blinkAt = 2; private t0 = performance.now() / 1000;
+  rig = new Container(); body = new Container(); hat = new Container(); armR = new Container();
+  /** Kept for the scene tweens; the official art has the left hand on the hip, so these are light accents. */
+  armL = new Container(); legL = new Container(); legR = new Container();
+  glow = new Graphics();
+  mode: Mode = 'idle'; phase = 0; private t0 = performance.now() / 1000;
   constructor() {
     super();
-    for (const [g, x] of [[this.legL, -8], [this.legR, 8]] as const) {
-      g.roundRect(-5, 0, 10, 14, 4.5).fill(FUR_D);
-      for (const dx of [-3, 0, 3]) g.moveTo(dx, 12).lineTo(dx + 0.6, 16).stroke({ width: 1.4, color: CLAW });
-      g.position.set(x, -15);
-    }
-    const b = this.body;
-    b.ellipse(0, -32, 19.5, 21).fill(FUR);
-    b.ellipse(0, -29, 12, 15).fill(BELLY);
-    for (const [x, y] of [[-14, -40], [-16, -30], [14, -38], [15, -27], [-6, -16], [6, -15]]) b.moveTo(x, y).lineTo(x + (x < 0 ? -2 : 2), y + 3).stroke({ width: 1.2, color: FUR_D });
-    b.arc(0, -32, 19.5, -1.25, 0.95).stroke({ width: 1.6, color: 0xb5cadb, alpha: 0.35 });
-    for (const [g, x, s] of [[this.armL, -15, -1], [this.armR, 15, 1]] as const) {
-      g.roundRect(-4.2, -2, 8.4, 29, 4.2).fill(FUR_D);
-      for (const dx of [-2.6, 0, 2.6]) g.moveTo(dx, 25).quadraticCurveTo(dx + s * 1.5, 30, dx + s * 3, 32).stroke({ width: 1.5, color: CLAW });
-      g.position.set(x, -46); g.rotation = -s * 0.28;
-    }
-    const h = new Graphics();
-    h.circle(0, 0, 16.5).fill(FUR);
-    h.arc(0, 0, 16.5, -1.1, 0.7).stroke({ width: 1.5, color: 0xb5cadb, alpha: 0.35 });
-    h.ellipse(0, 2.5, 13.5, 10.5).fill(MASK);
-    const patch = (x: number, rot: number) => { const p = new Graphics(); p.ellipse(0, 0, 5.4, 3.2).fill(PATCH); p.position.set(x, 1.6); p.rotation = rot; return p; };
-    this.eyes.circle(-6, 1.2, 1.9).fill(0x0c0907).circle(6, 1.2, 1.9).fill(0x0c0907).circle(-5.4, 0.6, 0.7).fill(0xffffff).circle(6.6, 0.6, 0.7).fill(0xffffff);
-    this.eyes.pivot.set(0, 1.2); this.eyes.y = 1.2;
-    const nose = new Graphics(); nose.ellipse(0, 6, 3, 2).fill(INK).moveTo(-3.2, 8.6).quadraticCurveTo(0, 11.2, 3.2, 8.6).stroke({ width: 1.2, color: INK });
-    this.head.addChild(h, patch(-6, 0.35), patch(6, -0.35), this.eyes, nose); this.head.position.set(0, -57);
-    const hg = new Graphics();
-    hg.ellipse(0, 0, 18.5, 3.8).fill(0x131418);
-    hg.roundRect(-11, -24, 22, 24, 2).fill(0x1b1d22);
-    hg.ellipse(0, -24, 11, 2.6).fill(0x2a2d33);
-    hg.rect(-11, -7.5, 22, 4.6).fill(0x02f7fd);
-    hg.rect(-11, -3, 22, 1).fill({ color: 0x000000, alpha: 0.4 });
-    hg.rect(-8, -21, 2.6, 12).fill({ color: 0xffffff, alpha: 0.1 });
-    this.hat.addChild(hg); this.hat.position.set(1, -70); this.hat.rotation = -0.1;
-    this.addChild(this.legL, this.legR, this.armL, this.body, this.armR, this.head, this.hat);
+    if (!tex) throw new Error('loadHubieArt first');
+    const sp = (t: Texture, m: { x: number; y: number; w: number; h: number }, ox: number, oy: number) => {
+      const s = new Sprite(t); s.width = m.w * K; s.height = m.h * K; s.position.set(px(m.x) - ox, py(m.y) - oy); return s;
+    };
+    // hover glow under the scooter
+    this.glow.ellipse(0, 0, 40, 6).fill({ color: 0xff9a3c, alpha: 0.18 }).ellipse(0, 0, 26, 3.5).fill({ color: 0xffc070, alpha: 0.28 });
+    this.glow.position.set(4, 1);
+    this.body.addChild(sp(tex.body, meta.body, 0, 0));
+    this.hat.addChild(sp(tex.hat, meta.hat, HAT.x, HAT.y)); this.resetHat();
+    this.armR.addChild(sp(tex.hand, meta.hand, WRIST.x, WRIST.y)); this.armR.position.set(WRIST.x, WRIST.y);
+    this.rig.addChild(this.body, this.armR, this.hat);
+    this.addChild(this.glow, this.rig);
   }
+  resetHat() { this.hat.position.set(HAT.x, HAT.y); this.hat.rotation = 0; }
   /** Called every frame. */
   tick(now: number) {
     const t = now - this.t0;
+    const hover = this.mode === 'air' || this.mode === 'fall' ? 0 : Math.sin(t * 3.1) * 1.4;
+    this.glow.visible = this.mode !== 'fall';
+    this.glow.scale.set(1 - hover * 0.04, 1 - hover * 0.06); this.glow.alpha = 0.8 + Math.sin(t * 9) * 0.15;
     if (this.mode === 'idle') {
-      this.body.scale.y = 1 + Math.sin(t * 2.2) * 0.02; this.body.y = -Math.sin(t * 2.2) * 0.6;
-      this.head.y = -57 + Math.sin(t * 2.2) * 0.8; this.hat.y = -70 + Math.sin(t * 2.2 - 0.4) * 0.9;
-      this.armL.rotation = 0.28 + Math.sin(t * 1.3) * 0.06; this.armR.rotation = -0.28 - Math.sin(t * 1.3 + 1) * 0.06;
-      this.legL.rotation = this.legR.rotation = 0; this.head.rotation = Math.sin(t * 0.6) * 0.05;
+      this.rig.y = -3 + hover; this.rig.rotation = Math.sin(t * 0.9) * 0.025;
+      this.body.scale.y = 1 + Math.sin(t * 2.2) * 0.012; this.body.y = 0;
+      this.armR.rotation = Math.sin(t * 1.4) * 0.07;
+      this.hat.y = HAT.y + Math.sin(t * 2.2 - 0.5) * 0.5;
     } else if (this.mode === 'walk') {
-      this.phase += 0.24; const s = Math.sin(this.phase);
-      this.legL.rotation = s * 0.55; this.legR.rotation = -s * 0.55; this.armL.rotation = 0.3 - s * 0.45; this.armR.rotation = -0.3 - s * 0.45;
-      const bob = Math.abs(Math.cos(this.phase)) * 2.2; this.body.y = -bob; this.head.y = -57 - bob; this.hat.y = -70 - bob; this.head.rotation = s * 0.06;
+      this.phase += 0.2; this.rig.y = -3 + Math.sin(this.phase * 2) * 1; this.rig.rotation = 0.06 + Math.sin(this.phase) * 0.02;
+      this.armR.rotation = Math.sin(this.phase) * 0.12;
+    } else if (this.mode === 'air') {
+      this.rig.y = -3; this.rig.rotation *= 0.9; this.glow.alpha = 0.4;
+    } else if (this.mode === 'win') {
+      this.rig.y = -3 + hover; this.armR.rotation = -0.35 + Math.sin(t * 14) * 0.25;
     } else if (this.mode === 'fall') {
-      this.armL.rotation = 2.4 + Math.sin(t * 30) * 0.6; this.armR.rotation = -2.4 - Math.sin(t * 30 + 1) * 0.6;
-      this.legL.rotation = Math.sin(t * 25) * 0.5; this.legR.rotation = -Math.sin(t * 25) * 0.5;
+      this.armR.rotation = Math.sin(t * 28) * 0.5; this.rig.rotation = Math.sin(t * 18) * 0.12;
     }
-    if (t > this.blinkAt) { this.eyes.scale.y = 0.12; if (t > this.blinkAt + 0.12) { this.eyes.scale.y = 1; this.blinkAt = t + 2 + Math.random() * 3; } }
   }
 }
