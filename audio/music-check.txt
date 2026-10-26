@@ -1,8 +1,28 @@
-music-sample.wav: 60s, 44100 Hz, peak 0.513 (-5.8 dBFS), samples at full scale 0
-RMS dBFS per second: -22 -22 -21 -31 -19 -27 -22 -20 -23 -20 -35 -22 -20 -19 -20 -21 -21 -20 -19 -20 -19 -20 -21 -21 -20 -18 -20 -19 -20 -21 -18 -20 -19 -18 -19 -31 -43 -20 -19 -18 -19 -19 -20 -19 -18 -19 -18 -18 -18 -20 -24 -25 -26 -30 -64 -20 -32 -20 -20 -31
-window 0s to 10s (intensity 0): strongest onset period 1530 ms = 39.2 BPM if quarter notes, periodicity strength 0.30
-window 10s to 20s (intensity 1): strongest onset period 890 ms = 67.4 BPM if quarter notes, periodicity strength 0.36
-window 20s to 30s (intensity 2): strongest onset period 1000 ms = 60.0 BPM if quarter notes, periodicity strength 0.33
-window 30s to 40s (intensity 3): strongest onset period 550 ms = 109.1 BPM if quarter notes, periodicity strength 0.56
-window 40s to 50s (intensity 4): strongest onset period 1070 ms = 56.1 BPM if quarter notes, periodicity strength 0.60
+music-sample.wav: 60s, 44100 Hz, peak 0.477 (-6.4 dBFS), samples at full scale 0
+RMS dBFS per second: -27 -26 -31 -25 -26 -30 -26 -26 -30 -26 -26 -22 -22 -21 -22 -25 -21 -21 -24 -22 -22 -22 -24 -21 -23 -21 -25 -22 -22 -22 -22 -21 -23 -21 -24 -21 -22 -22 -22 -23 -21 -21 -22 -23 -22 -22 -20 -23 -22 -21 -26 -20 -23 -30 -34 -20 -23 -19 -18 -18
+window 0s to 10s (intensity 0): strongest onset period 290 ms = 206.9 BPM if quarter notes, periodicity strength 0.35
+window 10s to 20s (intensity 1): strongest onset period 1170 ms = 51.3 BPM if quarter notes, periodicity strength 0.14
+window 20s to 30s (intensity 2): strongest onset period 680 ms = 88.2 BPM if quarter notes, periodicity strength 0.22
+window 30s to 40s (intensity 3): strongest onset period 1320 ms = 45.5 BPM if quarter notes, periodicity strength 0.19
+window 40s to 50s (intensity 4): strongest onset period 1280 ms = 46.9 BPM if quarter notes, periodicity strength 0.30
 Last 10 s hold the trap stinger and cash out stingers for tiers 0, 2 and 4.
+
+Spectrum share per band in dB of total energy (sub <80 Hz, low 80 to 250, mid 250 to 2k, presence 2k to 6k, air 6k+):
+  2s to 9s intro: sub -37.9, low -2.6, mid -4.2, presence -15.4, air -26.3
+  12s to 20s groove A: sub -6.6, low -1.6, mid -11.5, presence -19.8, air -30.2
+  22s to 30s groove A/B: sub -5.4, low -2.1, mid -11.2, presence -19.9, air -30.7
+  32s to 40s groove B: sub -6.1, low -1.8, mid -10.9, presence -19.8, air -29.8
+  41s to 46s tension: sub -2.2, low -5.3, mid -10.7, presence -19.0, air -28.8
+  46s to 50s release: sub -16.8, low -1.0, mid -7.4, presence -21.8, air -30.6
+Presence and air sit 20 to 30 dB under the low mids, so nothing is harsh; the master low pass opens from 2.6 kHz (intro) to 7 kHz (tension).
+
+Arrangement (src/sound.ts):
+  Swung triplet grid, 12 steps per bar, 82 BPM at rest, plus 3 BPM per intensity level (94 BPM at the top).
+  intro (idle): rhodes rootless voicings Dm9, G13, Cmaj9, A7b13 held long, brush swirls, CC0 rain loop and procedural vinyl crackle.
+  groove A (round started): two feel upright bass, ride pattern, brushed snare on 2 and 4 with hi hat foot, soft kick, Charleston rhodes comping.
+  groove B (higher rows): Bbmaj7#11, A7alt, Dm9, Gm9; walking bass (root, chord tones, chromatic or fifth approach on beat 4), saw pad, vibraphone motif.
+  tension (top rows): progression a half step up on Ebm9, pedal bass ostinato, busier kick and ride, motif an octave higher, high rhodes pings.
+  release (after a cash out or a fall from a high row): four bars of Fmaj9, Em7, A13, Dm9 with brushes only, then back to the intro.
+  Motif: 4 to 6 seeded scale degrees, developed each two bar phrase (transpose, inversion, displacement, rhodes answer for call and response), new cell every 8 bars.
+  Ghost notes are random, humanised timing of about 4 ms on every hit, sidechain dip of the band under each kick.
+  Stingers: trap is a falling noise and rhodes line; cash out tiers 0 to 4 grow from a vibraphone figure to a full band hit and a half step modulating fanfare.
